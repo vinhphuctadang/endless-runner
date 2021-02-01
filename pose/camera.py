@@ -109,14 +109,14 @@ def main():
         point = result[key]['x'], result[key]['y']
         cv2.circle(input_data, point, 1, (0, 255, 0), 2)
     # render result
-    # for edge in CONNECTED_PART_NAMES:
-    #     cv2.line(
-    #         input_data, 
-    #         (result[edge[0]]['x'], result[edge[0]]['y']),
-    #         (result[edge[1]]['x'], result[edge[1]]['y']),
-    #         (0, 0, 255),
-    #         2
-    #     )
+    for edge in CONNECTED_PART_NAMES:
+        cv2.line(
+            input_data, 
+            (result[edge[0]]['x'], result[edge[0]]['y']),
+            (result[edge[1]]['x'], result[edge[1]]['y']),
+            (0, 0, 255),
+            2
+        )
 
     cv2.imshow('frame', input_data)
     cv2.waitKey(0)
