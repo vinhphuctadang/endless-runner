@@ -1,8 +1,8 @@
 #
-# Vinh Phuc Ta Dang 
+# Vinh Phuc Ta Dang
 #
 import tensorflow as tf
-import cv2 
+import cv2
 import numpy as np
 import json
 import math
@@ -31,11 +31,13 @@ CONNECTED_PART_NAMES = [
 # Doing the legend steps:
 # tf.lite.Interpreter() -> transform data -> run inferences -> Interprete output
 
+
 def sigmoid(x):
     return 1/(1 + math.exp(-x))
 
+
 def main():
-    
+
     interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
     interpreter.allocate_tensors()
 
@@ -46,8 +48,8 @@ def main():
     # Test the model on random input data.
     input_shape = input_details[0]['shape']
     print('Loading image ...')
-    input_data = cv2.imread('./pose_scaled.png')
-    # input_data = cv2.resize(input_data, DST_SIZE) # scale image
+    input_data = cv2.imread('./acm-ptit.jpg')
+    input_data = cv2.resize(input_data, DST_SIZE)  # scale image
 
     input_data = input_data.astype(np.float32) / 255.0
     interpreter.set_tensor(input_details[0]['index'], [input_data])
@@ -64,7 +66,7 @@ def main():
     # heatmaps = interpreter.get_tensor_by_name('heatmap:0')
 
     # code inferred from https://github.com/tensorflow/examples/blob/master/lite/examples/posenet/android/posenet/src/main/java/org/tensorflow/lite/examples/posenet/lib/Posenet.kt
-    imgHeight = input_data.shape[0] 
+    imgHeight = input_data.shape[0]
     imgWidth = input_data.shape[1]
 
     height, width, numKeypoints = heatmaps.shape[1], heatmaps.shape[2], heatmaps.shape[3]
@@ -81,7 +83,7 @@ def main():
                     maxRow = row
                     maxCol = col
         keypointPositions[keypoint] = (maxRow, maxCol)
-    
+
     # # Calculating the x and y coordinates of the keypoints with offset adjustment.
     xCoords = [0] * numKeypoints
     yCoords = [0] * numKeypoints
@@ -91,8 +93,10 @@ def main():
         positionY = keypointPositions[idx][0]
         positionX = keypointPositions[idx][1]
         # compute coordination and confidence value
-        yCoords[idx] = int(positionY / (height - 1) * imgHeight + offsets[0][positionY][positionX][idx])
-        xCoords[idx] = int(positionX / (width - 1 ) * imgWidth  + offsets[0][positionY][positionX][idx + numKeypoints])
+        yCoords[idx] = int(positionY / (height - 1) *
+                           imgHeight + offsets[0][positionY][positionX][idx])
+        xCoords[idx] = int(positionX / (width - 1) * imgWidth +
+                           offsets[0][positionY][positionX][idx + numKeypoints])
         confidenceScores[idx] = sigmoid(heatmaps[0][positionY][positionX][idx])
 
     result = {}
@@ -111,7 +115,7 @@ def main():
     # render result
     for edge in CONNECTED_PART_NAMES:
         cv2.line(
-            input_data, 
+            input_data,
             (result[edge[0]]['x'], result[edge[0]]['y']),
             (result[edge[1]]['x'], result[edge[1]]['y']),
             (0, 0, 255),
@@ -120,6 +124,7 @@ def main():
 
     cv2.imshow('frame', input_data)
     cv2.waitKey(0)
+
 
 if __name__ == '__main__':
     main()
