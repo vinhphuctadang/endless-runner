@@ -4,7 +4,6 @@
 from tensorflow.keras.models import load_model
 import tensorflow as tf
 import numpy as np
-import json
 import math
 import cv2
 
@@ -14,7 +13,7 @@ DST_SIZE = (257, 257)
 
 
 ratio = BODY_SIZE[0] / DST_SIZE[0]
-VIDEO_URI = 'Phuc_Test.mp4'
+VIDEO_URI = '/Users/dcongtinh/Workspace/endless-runner/pose/datasets/running/Tinh_Running.mov'
 
 # VIDEO_URI = '/Users/dcongtinh/Workspace/endless-runner/pose/walking.mov'
 # # parts of pose

@@ -127,6 +127,7 @@ def main():
         action_dir = os.path.join('datasets', action)
         if '.DS_Store' not in action_dir:
             print("\n############# ACTION: %s #############\n" % action)
+            total = 0
             for vid in os.listdir(action_dir):
                 _, ext = os.path.splitext(vid)
                 if ext in VID_EXT_VALIDS:
@@ -134,10 +135,13 @@ def main():
                     keyPoints = extractFeatures(video_path)
                     labels = np.append(labels, np.array(
                         [action]*keyPoints.shape[0]))
+                    total += keyPoints.shape[0]
                     if len(actions) == 0:
                         actions = keyPoints
                     else:
                         actions = np.vstack((actions, keyPoints))
+            print("Total: %d\n" % total)
+
     print('actions.shape =', actions.shape)
     print('labels.shape =', labels.shape)
     # np.save('actions.npy', actions)
