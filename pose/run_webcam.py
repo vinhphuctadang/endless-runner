@@ -10,10 +10,11 @@ import cv2
 MODEL_PATH = 'model/posenet_mobilenet_v1_100_257x257_multi_kpt_stripped.tflite'
 BODY_SIZE = (257, 257)
 DST_SIZE = (257, 257)
+THRESHOLD = 0.9
 
 
 ratio = BODY_SIZE[0] / DST_SIZE[0]
-VIDEO_URI = '/Users/dcongtinh/Workspace/endless-runner/pose/datasets/running/Tinh_Running.mov'
+VIDEO_URI = 0 # '/Users/dcongtinh/Workspace/endless-runner/pose/datasets/running/Tinh_Running.mov'
 
 # VIDEO_URI = '/Users/dcongtinh/Workspace/endless-runner/pose/walking.mov'
 # # parts of pose
@@ -143,14 +144,20 @@ def main():
             }
 
         # print('Result:', json.dumps(result, indent=2))
-
+        lined_frame = frame.copy()
         for key in result:
+            if result[key]['c'] < THRESHOLD:
+                continue
             point = result[key]['x'], result[key]['y']
             cv2.circle(frame, point, 1, (0, 255, 0), 2)
+            cv2.circle(lined_frame, point, 1, (0, 255, 0), 2)
+        
         # render result
         for edge in CONNECTED_PART_NAMES:
+            if result[edge[0]]['c'] < THRESHOLD or result[edge[1]]['c'] < THRESHOLD: 
+                continue
             cv2.line(
-                frame,
+                lined_frame,
                 (result[edge[0]]['x'], result[edge[0]]['y']),
                 (result[edge[1]]['x'], result[edge[1]]['y']),
                 (0, 0, 255),
@@ -170,6 +177,7 @@ def main():
                     fontFace, fontScale=fontScale, color=(0, 255, 0), thickness=thickness)
 
         cv2.imshow('frame', frame)
+        cv2.imshow('lined_frame', lined_frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
