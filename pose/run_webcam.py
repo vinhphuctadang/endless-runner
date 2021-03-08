@@ -112,16 +112,10 @@ def main():
         else:
             frame = frame[:, ::-1]
         #--------------------------------------------------------------------------#
-        min_scale = max(DST_SIZE[0]/frame.shape[0], DST_SIZE[1]/frame.shape[1])
-        scale_size = (int(min_scale*frame.shape[1]), int(min_scale*frame.shape[0]))
-        scale_frame = cv2.resize(frame, scale_size)
-
-        print("Scale shaape:", scale_frame.shape)
-        predict_pivot = ((scale_frame.shape[0] - scale_size[1])//2, (scale_frame.shape[1] - scale_size[0])//2)
-        predict_frame = scale_frame[predict_pivot[0]:predict_pivot[0]+DST_SIZE[0], predict_pivot[1]:predict_pivot[1]+DST_SIZE[1]]
-        # from now on, frame works as an input for function get_pose
-        # frame = cv2.resize(frame, DST_SIZE)  # scale image
-        predict_frame = predict_frame.astype(np.float32) / 255.0
+        origin_size = frame.shape
+        crop_size = min(frame.shape[0], frame.shape[1])
+        pivot = ((frame.shape[0] - crop_size)//2, (frame.shape[1] - crop_size)//2)
+        predict_frame = cv2.resize(frame[pivot[0]:pivot[0]+crop_size, pivot[1]:pivot[1]+crop_size], DST_SIZE).astype(np.float32) / 255.0
 
         pose = get_pose(interpreter, predict_frame)
         render_pose(predict_frame, pose)
