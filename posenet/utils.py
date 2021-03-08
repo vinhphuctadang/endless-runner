@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-
 import posenet.constants
 
 
@@ -29,11 +28,12 @@ def _process_input(source_img, scale_factor=1.0, output_stride=16):
 
 def read_cap(cap, flip=False, scale_factor=1.0, output_stride=16):
     res, img = cap.read()
+    if not res:
+        raise IOError("webcam failure")
+
     img = cv2.resize(img, (375, 480))
     if flip:
         img = cv2.flip(img, 1)  # Flip horizontal
-    if not res:
-        raise IOError("webcam failure")
     return _process_input(img, scale_factor, output_stride)
 
 
