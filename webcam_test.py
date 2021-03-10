@@ -15,7 +15,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 VID_EXT_VALIDS = ['.mp4', '.mov']
 scale_factor = 0.5
 GUI_Enable = True
-VIDEO_URI = 0
+VIDEO_URI = '/Users/dcongtinh/Workspace/endless-runner/pose/datasets/walking/Tinh_Walking_2.mov'
 fontFace = cv2.FONT_HERSHEY_SIMPLEX
 fontScale, thickness = 0.75, 2
 
