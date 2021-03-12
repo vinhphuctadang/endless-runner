@@ -15,13 +15,13 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 VID_EXT_VALIDS = ['.mp4', '.mov']
 scale_factor = 0.5
 GUI_Enable = True
-VIDEO_URI = '/Users/dcongtinh/Workspace/endless-runner/pose/datasets/walking/Tinh_Walking_2.mov'
+VIDEO_URI = 0
 fontFace = cv2.FONT_HERSHEY_SIMPLEX
 fontScale, thickness = 0.75, 2
 
 actions = np.load('labels.npy')
 actions = np.unique(actions)
-model_loaded = load_model('lstm_keras.h5')
+model_loaded = load_model('lstm_keras_2.h5')
 
 
 def main():
@@ -30,7 +30,10 @@ def main():
     output_stride = model_cfg['output_stride']
 
     cap = cv2.VideoCapture(VIDEO_URI)
-    flip = True
+    if type(VIDEO_URI) == type(''):
+        flip = False
+    else:
+        flip = True
     cap.set(3, 257)
     cap.set(4, 257)
     frame_count = 0
