@@ -1,6 +1,6 @@
-#
+# # # # # # # # # # # # # # # #
 # Vinh Phuc Ta Dang ft Dao Cong Tinh
-#
+# # # # # # # # # # # # # # # # 
 import os
 import cv2
 import posenet
@@ -22,7 +22,6 @@ fontScale, thickness = 0.75, 2
 actions = np.load('labels.npy')
 actions = np.unique(actions)
 model_loaded = load_model('lstm_keras.h5')
-
 
 def main():
     sess = K.get_session()
@@ -80,7 +79,7 @@ def main():
         if GUI_Enable:
             overlay_image = posenet.draw_skel_and_kp(
                 display_image, pose_scores, keypoint_scores, keypoint_coords,
-                min_pose_score=0.15, min_part_score=0.1)
+                min_pose_score=0.15, min_part_score=0.15)
 
             cv2.putText(overlay_image, label, (20, 20),
                         fontFace, fontScale=fontScale, color=(0, 255, 0), thickness=thickness)
