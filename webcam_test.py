@@ -21,7 +21,7 @@ fontScale, thickness = 0.75, 2
 
 actions = np.load('labels.npy')
 actions = np.unique(actions)
-model_loaded = load_model('lstm_keras.h5')
+model_loaded = load_model('lstm_keras_2.h5')
 
 def main():
     sess = K.get_session()
@@ -29,7 +29,10 @@ def main():
     output_stride = model_cfg['output_stride']
 
     cap = cv2.VideoCapture(VIDEO_URI)
-    flip = True
+    if type(VIDEO_URI) == type(''):
+        flip = False
+    else:
+        flip = True
     cap.set(3, 257)
     cap.set(4, 257)
     frame_count = 0
