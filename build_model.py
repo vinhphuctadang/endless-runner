@@ -20,12 +20,10 @@ from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLRO
 
 class model_tools:
 
-    def __init__(self, X=None, y=None, test_size=0.3, model_path=None, **kwargs):
+    def __init__(self, X=None, y=None, test_size=0.3, model_name='lstm', model_path=None, **kwargs):
         if X is not None:
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=test_size, random_state=2021)
-            labels = np.unique(y)
-            self.labels = labels
             self.X_train = X_train
             self.X_test = X_test
             self.y_train = y_train
@@ -35,20 +33,20 @@ class model_tools:
             self.model = load_model(model_path)
         else:
             n_hidden = 16
-            n_classes = len(labels)
-
-            model = Sequential(name="lstm_keras")
-
-            model.add(LSTM(n_hidden, input_shape=(window_size, num_keypoints)))
-            # model.add(Flatten())
-            # model.add(Dense(32, activation='relu'))
-            model.add(Dropout(0.5))
+            model = Sequential(name=model_name)
+            if 'lstm' in model_name:
+                model.add(LSTM(n_hidden, input_shape=(
+                    window_size, num_keypoints)))
+                # model.add(Flatten())
+                # model.add(Dense(32, activation='relu'))
+                model.add(Dropout(0.5))
             model.add(Dense(n_classes, activation='softmax'))
             self.model = model
             self.model.compile(optimizer='adam',
                                loss='categorical_crossentropy', metrics=['accuracy', AUC(name="auc")])
 
         model.summary()
+        self.model_name = model_name
 
     def fit_and_save_model(self, es=False, mc=False, rlr=False, log=False):
         print('\n[INFO] training network...')
@@ -97,8 +95,9 @@ class model_tools:
             f.close()
 
         f = open(cfg_path, 'w')
-        f.write('num_class=%d\n' % len(self.labels))
-        f.write('classes={}\n'.format(self.labels))
+        f.write('model_name=%s\n' % self.model_name)
+        f.write('num_class=%d\n' % n_classes)
+        f.write('classes={}\n'.format(classes))
         f.write('epochs=%d\n' % epochs)
         f.write('batch_size=%d\n' % batch_size)
         f.write('window_size=%d\n' % window_size)
@@ -137,7 +136,7 @@ class model_tools:
         cm = confusion_matrix(y_true, y_pred)
         cm = cm / cm.astype(np.float).sum(axis=1)
         g = sns.heatmap(cm, annot=True, fmt='.2f', cmap="Blues",
-                        xticklabels=self.labels, yticklabels=self.labels)
+                        xticklabels=classes, yticklabels=classes)
         g.set_xticklabels(g.get_xticklabels(), ha='center', rotation=0)
         g.set_yticklabels(g.get_yticklabels(), rotation=0)
         plt.ylabel("True Label")

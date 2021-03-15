@@ -1,7 +1,7 @@
 import os
 import time
 
-window_size = 10
+window_size = 20
 num_keypoints = 16
 project_dirname = '/Users/dcongtinh/Workspace/endless-runner'  # os.getcwd()
 # project_dirname = os.path.join(project_dirname, 'train', 'CNN')
@@ -25,6 +25,11 @@ acc_plot_path = os.path.join(result_dir, 'ACC_plot.png')
 auc_plot_path = os.path.join(result_dir, 'AUC_plot.png')
 loss_plot_path = os.path.join(result_dir, 'LOSS_plot.png')
 cm_plot_path = os.path.join(result_dir, 'CM_plot.png')
+
+classes = os.listdir('pose/datasets')
+classes.sort()
+classes = [_class for _class in classes if _class != '.DS_Store']
+n_classes = len(classes)
 
 # date_result_sorted = sorted(os.listdir(
 #     os.path.join(project_dirname, 'results', dataset_name)))
