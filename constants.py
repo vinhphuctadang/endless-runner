@@ -3,11 +3,7 @@ import time
 
 window_size = 20
 num_keypoints = 16
-<<<<<<< HEAD
-project_dirname = os.getcwd()
-=======
 project_dirname = '/Users/dcongtinh/Workspace/endless-runner'  # os.getcwd()
->>>>>>> 7df65d55bfd133382272e67d7c3b9da4197b8d10
 # project_dirname = os.path.join(project_dirname, 'train', 'CNN')
 project_dirname = os.path.join(project_dirname)  # Run code Jupyter
 
@@ -43,8 +39,4 @@ n_classes = len(classes)
 # model_load_path = os.path.join(
 #     project_dirname, 'results', dataset_name, date_result, date_result + 'model.keras')
 # model_json_load_path = os.path.join(
-<<<<<<< HEAD
 #     project_dirname, 'results', dataset_name, date_result, date_result + 'model.json')
-=======
-#     project_dirname, 'results', dataset_name, date_result, date_result + 'model.json')
->>>>>>> 7df65d55bfd133382272e67d7c3b9da4197b8d10
