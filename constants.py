@@ -1,7 +1,7 @@
 import os
 import time
 
-window_size = 20
+window_size = 10
 num_keypoints = 16
 project_dirname = '/Users/dcongtinh/Workspace/endless-runner'  # os.getcwd()
 # project_dirname = os.path.join(project_dirname, 'train', 'CNN')

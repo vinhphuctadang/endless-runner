@@ -20,7 +20,7 @@ from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLRO
 
 class model_tools:
 
-    def __init__(self, X=None, y=None, test_size=0.3, model_name='lstm', model_path=None, **kwargs):
+    def __init__(self, X=None, y=None, test_size=0.3, model_name='lstm', n_layers=1, dropout=0., model_path=None, **kwargs):
         if X is not None:
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=test_size, random_state=2021)
@@ -36,17 +36,26 @@ class model_tools:
             model = Sequential(name=model_name)
             if 'lstm' in model_name:
                 model.add(LSTM(n_hidden, input_shape=(
-                    window_size, num_keypoints)))
-                # model.add(Flatten())
-                # model.add(Dense(32, activation='relu'))
-                model.add(Dropout(0.5))
-            model.add(Dense(n_classes, activation='softmax'))
+                    window_size, num_keypoints), name='lstm_0', return_sequences=False if n_layers == 1 else True))
+
+                for layer in range(n_layers-1):
+                    model.add(
+                        LSTM(n_hidden*(layer+2),
+                             return_sequences=False if layer == n_layers -
+                             2 else True,  # False if current layer == last layer
+                             name='lstm_%d' % (layer+1)))
+                model.add(Dropout(dropout))
+                model.add(Dense(n_classes, activation='softmax'))
+
             self.model = model
             self.model.compile(optimizer='adam',
                                loss='categorical_crossentropy', metrics=['accuracy', AUC(name="auc")])
 
         model.summary()
         self.model_name = model_name
+        self.n_layers = n_layers
+        self.dropout = dropout
+        self.test_size = test_size
 
     def fit_and_save_model(self, es=False, mc=False, rlr=False, log=False):
         print('\n[INFO] training network...')
@@ -95,13 +104,17 @@ class model_tools:
             f.close()
 
         f = open(cfg_path, 'w')
-        f.write('model_name=%s\n' % self.model_name)
         f.write('num_class=%d\n' % n_classes)
         f.write('classes={}\n'.format(classes))
-        f.write('epochs=%d\n' % epochs)
-        f.write('batch_size=%d\n' % batch_size)
+        f.write('test_size=%s\n' % self.test_size)
         f.write('window_size=%d\n' % window_size)
         f.write('num_keypoints=%d\n' % num_keypoints)
+        f.write('model_name=%s\n' % self.model_name)
+        f.write('n_layers=%d\n' % self.n_layers)
+        f.write('epochs=%d\n' % epochs)
+        f.write('batch_size=%d\n' % batch_size)
+        f.write('dropout=%.2f\n' % self.dropout)
+
         if es:
             f.write('patience=%d\n\n' % patience)
         f.write('model_save_path=%s\n' % model_save_path)
