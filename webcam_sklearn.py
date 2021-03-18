@@ -6,6 +6,7 @@ import cv2
 import posenet
 import numpy as np
 from constants import *
+from joblib import load
 from scipy.spatial.distance import euclidean
 from tensorflow.keras.models import load_model
 from tensorflow.compat.v1.keras import backend as K
@@ -21,8 +22,9 @@ fontScale, thickness = 0.75, 2
 
 actions = np.load('labels.npy')
 actions = np.unique(actions)
-model_loaded = load_model(
-    '/Users/dcongtinh/Workspace/endless-runner/results/20210314_160244/20210314_160244model.h5')
+# model_loaded = load_model(
+#     '/Users/dcongtinh/Workspace/endless-runner/results/20210314_160244/20210314_160244model.h5')
+model_loaded = load('svm.model')
 
 
 def main():
@@ -75,7 +77,11 @@ def main():
         if frame_count % window_size == 0:
             frame_seq = np.array(frame_seq)
             frame_seq = np.expand_dims(frame_seq, axis=0)
-            pred = model_loaded.predict(frame_seq)[0]
+            # print(frame_seq.shape)
+            pred = model_loaded.predict(
+                frame_seq.reshape(frame_seq.shape[0], frame_seq.shape[1]*frame_seq.shape[2]))
+            print(model_loaded.predict_proba(frame_seq.reshape(
+                frame_seq.shape[0], frame_seq.shape[1]*frame_seq.shape[2])))
             pred = np.argmax(pred)
             label = actions[pred]
             frame_seq = []

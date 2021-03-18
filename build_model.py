@@ -30,11 +30,11 @@ class model_tools:
             self.y_test = y_test
 
         if model_path:
-            self.model = load_model(model_path)
+            model = load_model(model_path)
         else:
             n_hidden = 16
-            model = Sequential(name=model_name)
             if 'lstm' in model_name:
+                model = Sequential(name=model_name)
                 model.add(LSTM(n_hidden, input_shape=(
                     window_size, num_keypoints), name='lstm_0', return_sequences=False if n_layers == 1 else True))
 
@@ -46,12 +46,11 @@ class model_tools:
                              name='lstm_%d' % (layer+1)))
                 model.add(Dropout(dropout))
                 model.add(Dense(n_classes, activation='softmax'))
+                model.compile(optimizer='adam',
+                              loss='categorical_crossentropy', metrics=['accuracy', AUC(name="auc")])
+                model.summary()
 
-            self.model = model
-            self.model.compile(optimizer='adam',
-                               loss='categorical_crossentropy', metrics=['accuracy', AUC(name="auc")])
-
-        model.summary()
+        self.model = model
         self.model_name = model_name
         self.n_layers = n_layers
         self.dropout = dropout
