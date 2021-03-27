@@ -9,7 +9,7 @@ sys.path.append("../../")
 import cv2
 import posenet
 import numpy as np
-# from constants import *
+from constants import *
 from scipy.spatial.distance import euclidean
 from tensorflow.keras.models import load_model
 from tensorflow.compat.v1.keras import backend as K
@@ -22,11 +22,15 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 scale_factor = 0.5
 GUI_Enable = True
 VIDEO_URI = 0
+MODEL_DIR = "_models/pose_clf_20210324_090942.h5"
+LABEL_DIR = "_models/labels.npy"
+
 fontFace = cv2.FONT_HERSHEY_SIMPLEX
 fontScale, thickness = 0.75, 2
 
 app             = Flask(__name__)
-device          = None
+
+cap             = None
 frame_series    = None
 frame_seq       = None 
 frame_count     = None 
@@ -39,6 +43,11 @@ output_stride   = None
 pose_scores     = None
 keypoint_scores = None
 keypoint_coords = None 
+
+# model and action
+current_action  = None
+actions         = ["idle", "running", "walking"]
+model_loaded    = None
 
 mutex = Lock()
 
@@ -67,14 +76,17 @@ def get_pose():
                 }
             )
             i += 1
+        
         result = {
-            "code": 1, 
-            "result" : tmp_coords,
+            "code": "SUCCESS", 
+            # "coords" : tmp_coords,
+            "action": current_action,
         }
     else:
         result = {
-            "code": -1,
-            "message": "No pose detected"
+            "code": "NO_POSE_DETECTED",
+            # "coords": [],
+            "action": "",
         }, 500
     mutex.release()
     return result
@@ -97,8 +109,14 @@ def get_pose():
 #     return {"code": 1}
 
 def do_workflow():
-    global frame_count, frame_series, frame_seq, label, model_cfg, model_outputs, output_stride
+    global cap, frame_count, frame_series, frame_seq, label, model_cfg, model_outputs, output_stride
     global pose_scores, keypoint_scores, keypoint_coords
+
+    global actions, model_loaded, current_action
+    #
+    # load model:
+    #
+    model_loaded = load_model(MODEL_DIR)
 
     sess = K.get_session()
     model_cfg, model_outputs = posenet.load_model(101, sess)
@@ -130,10 +148,30 @@ def do_workflow():
             min_pose_score=0.25)
         keypoint_coords *= output_scale        
         mutex.release()
+
+        first_keypoint = keypoint_coords[0]
+        nose = first_keypoint[0]
+        feature = []
+        for i in range(1, len(first_keypoint)):
+            feature.append(euclidean(nose, first_keypoint[i]))
+
+        frame_count += 1
+        frame_seq.append(feature)
+        if frame_count % window_size == 0:
+            frame_seq = np.array(frame_seq)
+            frame_seq = np.expand_dims(frame_seq, axis=0)
+            pred = model_loaded.predict(frame_seq)[0]
+            pred = np.argmax(pred)
+
+            mutex.acquire()
+            current_action = actions[pred]
+            mutex.release()
+            frame_seq = []
+
     cap.release()
 if __name__=="__main__":
     main_thread = Thread(target=do_workflow, args=())
     main_thread.start()
-    app.run(debug=True)
+    app.run(host="0.0.0.0", debug=True)
 
     
