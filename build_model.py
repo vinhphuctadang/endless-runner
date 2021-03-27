@@ -13,14 +13,14 @@ from sklearn.metrics import confusion_matrix
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.models import load_model
 from tensorflow.keras.callbacks import CSVLogger
-from tensorflow.keras.layers import LSTM, Dropout
+from tensorflow.keras.layers import LSTM, Dropout, Bidirectional, TimeDistributed
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 
 
 class model_tools:
 
-    def __init__(self, X=None, y=None, test_size=0.3, model_name='lstm', n_layers=1, dropout=0., model_path=None, **kwargs):
+    def __init__(self, X=None, y=None, test_size=0.3, model_name='lstm', n_layers=1, dropout=0., model_path=None, activation='tanh', **kwargs):
         if X is not None:
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=test_size, random_state=2021)
@@ -35,16 +35,23 @@ class model_tools:
             n_hidden = 16
             if 'lstm' in model_name:
                 model = Sequential(name=model_name)
-                model.add(LSTM(n_hidden, input_shape=(
-                    window_size, num_keypoints), name='lstm_0', return_sequences=False if n_layers == 1 else True))
+                model.add(LSTM(n_hidden, input_shape=(window_size, num_keypoints),
+                               name='lstm_0',
+                               activation=activation,
+                               return_sequences=False if n_layers == 1 else True
+                               ))
 
                 for layer in range(n_layers-1):
                     model.add(
                         LSTM(n_hidden*(layer+2),
-                             return_sequences=False if layer == n_layers -
-                             2 else True,  # False if current layer == last layer
-                             name='lstm_%d' % (layer+1)))
+                             name='lstm_%d' % (layer+1),
+                             activation=activation,
+                             # False if current layer == last layer
+                             return_sequences=False if layer == n_layers - 2 else True,
+                             )
+                    )
                 model.add(Dropout(dropout))
+                # model.add(Dense(128, activation='relu'))
                 model.add(Dense(n_classes, activation='softmax'))
                 model.compile(optimizer='adam',
                               loss='categorical_crossentropy', metrics=['accuracy', AUC(name="auc")])
@@ -55,13 +62,14 @@ class model_tools:
         self.n_layers = n_layers
         self.dropout = dropout
         self.test_size = test_size
+        self.activation = activation
 
     def fit_and_save_model(self, es=False, mc=False, rlr=False, log=False):
         print('\n[INFO] training network...')
         callbacks = []
         if es:
             callbacks.append(EarlyStopping(monitor='val_accuracy',
-                                           mode='auto', verbose=1, patience=patience, min_delta=.0001, baseline=None,
+                                           mode='auto', verbose=1, patience=patience, min_delta=1e-3, baseline=None,
                                            restore_best_weights=True))
         if mc:
             callbacks.append(ModelCheckpoint(model_save_path,
@@ -110,6 +118,7 @@ class model_tools:
         f.write('num_keypoints=%d\n' % num_keypoints)
         f.write('model_name=%s\n' % self.model_name)
         f.write('n_layers=%d\n' % self.n_layers)
+        f.write('activation=%s\n' % self.activation)
         f.write('epochs=%d\n' % epochs)
         f.write('batch_size=%d\n' % batch_size)
         f.write('dropout=%.2f\n' % self.dropout)

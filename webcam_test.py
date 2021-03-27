@@ -19,10 +19,8 @@ VIDEO_URI = '/Users/dcongtinh/Workspace/endless-runner/pose/datatest/Tinh_Test.m
 fontFace = cv2.FONT_HERSHEY_SIMPLEX
 fontScale, thickness = 0.75, 2
 
-actions = np.load('labels.npy')
-actions = np.unique(actions)
 model_loaded = load_model(
-    '/Users/dcongtinh/Workspace/endless-runner/results/20210314_160244/20210314_160244model.h5')
+    '/Users/dcongtinh/Workspace/endless-runner/results/20210324_090239/20210324_090239model.h5')
 
 
 def main():
@@ -77,7 +75,7 @@ def main():
             frame_seq = np.expand_dims(frame_seq, axis=0)
             pred = model_loaded.predict(frame_seq)[0]
             pred = np.argmax(pred)
-            label = actions[pred]
+            label = classes[pred]
             frame_seq = []
 
         # TODO this isn't particularly fast, use GL for drawing and display someday...
