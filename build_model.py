@@ -50,8 +50,8 @@ class model_tools:
                              return_sequences=False if layer == n_layers - 2 else True,
                              )
                     )
-                model.add(Dropout(dropout))
                 # model.add(Dense(128, activation='relu'))
+                model.add(Dropout(dropout))
                 model.add(Dense(n_classes, activation='softmax'))
                 model.compile(optimizer='adam',
                               loss='categorical_crossentropy', metrics=['accuracy', AUC(name="auc")])
