@@ -44,6 +44,9 @@ pose_scores     = None
 keypoint_scores = None
 keypoint_coords = None 
 
+get_img         = None
+display_html    = False
+
 # model and action
 current_action  = None
 actions         = ["idle", "running", "walking"]
@@ -91,6 +94,25 @@ def get_pose():
     mutex.release()
     return result
 
+def b64encode(image):
+    '''
+    image: array data
+    '''
+    import base64
+    success, img_enc = cv2.imencode('.JPEG', image)
+    data = base64.b64encode(img_enc)
+    img = data.decode('ascii')
+    if display_html:
+        img = 'data:image/jpeg;base64,%s' % img
+    return img
+
+@app.route("/image")
+def get_image():
+    result = b64encode(get_img)
+    if display_html:
+        result = "<img src='%s'/>" % result
+    return result
+
 # @app.route("/init")
 # def init():
 #     try:
@@ -113,6 +135,7 @@ def do_workflow():
     global pose_scores, keypoint_scores, keypoint_coords
 
     global actions, model_loaded, current_action
+    global get_img
     #
     # load model:
     #
@@ -162,13 +185,27 @@ def do_workflow():
             frame_seq = np.expand_dims(frame_seq, axis=0)
             pred = model_loaded.predict(frame_seq)[0]
             pred = np.argmax(pred)
-
             mutex.acquire()
             current_action = actions[pred]
+            label = current_action
             mutex.release()
             frame_seq = []
 
+        overlay_image = posenet.draw_skel_and_kp(
+            display_image, pose_scores, keypoint_scores, keypoint_coords,
+            min_pose_score=0.15, min_part_score=0.15)
+
+        cv2.putText(overlay_image, label, (20, 20),
+                    fontFace, fontScale=fontScale, color=(0, 255, 0), thickness=thickness)
+        get_img = overlay_image
+        # print(get_img.shape)
+        # cv2.imshow('Posenet', overlay_image)
+        # if cv2.waitKey(1) & 0xFF == ord('q'):
+        #     break
+
     cap.release()
+    # cv2.destroyAllWindows()
+
 if __name__=="__main__":
     main_thread = Thread(target=do_workflow, args=())
     main_thread.start()
