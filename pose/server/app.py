@@ -1,6 +1,6 @@
 # # # # # # # # # # # # # # # #
 # Vinh Phuc Ta Dang ft Dao Cong Tinh
-# # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # #
 import os
 import sys
 # add search path
@@ -10,17 +10,16 @@ import cv2
 import posenet
 import numpy as np
 from constants import *
+from threading import Thread, Lock
 from scipy.spatial.distance import euclidean
 from tensorflow.keras.models import load_model
-from tensorflow.compat.v1.keras import backend as K
+from flask import Flask, render_template, Response
+from tensorflow.compat.v1.keras.backend import get_session
 
-from threading import Thread, Lock
-from flask import Flask
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 scale_factor = 0.5
-GUI_Enable = True
 VIDEO_URI = 0
 MODEL_DIR = "_models/pose_clf_20210324_090942.h5"
 LABEL_DIR = "_models/labels.npy"
@@ -28,31 +27,30 @@ LABEL_DIR = "_models/labels.npy"
 fontFace = cv2.FONT_HERSHEY_SIMPLEX
 fontScale, thickness = 0.75, 2
 
-app             = Flask(__name__)
+app = Flask(__name__)
 
 cap             = None
 frame_series    = None
-frame_seq       = None 
-frame_count     = None 
+frame_seq       = None
+frame_count     = None
 # tf session
-sess            = None 
+sess            = None
 model_cfg       = None
-model_outputs   = None 
+model_outputs   = None
 output_stride   = None
 
 pose_scores     = None
 keypoint_scores = None
-keypoint_coords = None 
+keypoint_coords = None
 
 get_img         = None
-display_html    = False
 
 # model and action
 current_action  = None
-actions         = ["idle", "running", "walking"]
 model_loaded    = None
-
+actions = ["idle", "running", "walking"]
 mutex = Lock()
+
 
 @app.route("/")
 def ping():
@@ -62,6 +60,7 @@ def ping():
     # ready
     return {"code": 1}
 
+
 @app.route("/pose")
 def get_pose():
     global pose_scores, keypoint_scores, keypoint_coords
@@ -70,7 +69,7 @@ def get_pose():
     tmp_coords = []
     i = 0
     if keypoint_coords is not None:
-        for coord in keypoint_coords[0]: # only consider pose 0
+        for coord in keypoint_coords[0]:  # only consider pose 0
             tmp_coords.append(
                 {
                     'x': coord[0],
@@ -79,9 +78,9 @@ def get_pose():
                 }
             )
             i += 1
-        
+
         result = {
-            "code": "SUCCESS", 
+            "code": "SUCCESS",
             # "coords" : tmp_coords,
             "action": current_action,
         }
@@ -94,6 +93,7 @@ def get_pose():
     mutex.release()
     return result
 
+
 def b64encode(image):
     '''
     image: array data
@@ -102,21 +102,45 @@ def b64encode(image):
     success, img_enc = cv2.imencode('.JPEG', image)
     data = base64.b64encode(img_enc)
     img = data.decode('ascii')
-    if display_html:
-        img = 'data:image/jpeg;base64,%s' % img
+    img = 'data:image/jpeg;base64,%s' % img
     return img
+
+
+@app.route("/show_image")
+def show_image():
+    return "<img style='display: flex; margin: auto' src='%s'/>" % b64encode(get_img)
+
 
 @app.route("/image")
 def get_image():
-    result = b64encode(get_img)
-    if display_html:
-        result = "<img src='%s'/>" % result
-    return result
+    import base64
+    success, img_enc = cv2.imencode('.JPEG', get_img)
+    data = base64.b64encode(img_enc)
+    img = data.decode('ascii')
+    return img
+
+
+@app.route("/video")
+def get_images():
+    return render_template('video.html')
+
+
+def gen():
+    while True:
+        success, img_enc = cv2.imencode('.JPEG', get_img)
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + b'%s' % (img_enc.tobytes()) + b'\r\n')
+
+
+@app.route('/video_feed')
+def video_feed():
+    return Response(gen(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
 
 # @app.route("/init")
 # def init():
 #     try:
-        
+
 #     except Exception as e:
 #         return {"code": -1, "message": str(e)}, 500
 #     return {"code": 1}
@@ -130,6 +154,7 @@ def get_image():
 #         return {"code": -1, "message": str(e)}, 500
 #     return {"code": 1}
 
+
 def do_workflow():
     global cap, frame_count, frame_series, frame_seq, label, model_cfg, model_outputs, output_stride
     global pose_scores, keypoint_scores, keypoint_coords
@@ -141,14 +166,14 @@ def do_workflow():
     #
     model_loaded = load_model(MODEL_DIR)
 
-    sess = K.get_session()
+    sess = get_session()
     model_cfg, model_outputs = posenet.load_model(101, sess)
     output_stride = model_cfg['output_stride']
 
     cap = cv2.VideoCapture(VIDEO_URI)
     flip = True
-    cap.set(3, 257)
-    cap.set(4, 257)
+    # cap.set(3, 257)
+    # cap.set(4, 257)
     frame_count = 0
     frame_series, frame_seq = [], []
     label = 'idle'
@@ -169,7 +194,7 @@ def do_workflow():
             displacement_bwd_result.squeeze(axis=0),
             output_stride=output_stride,
             min_pose_score=0.25)
-        keypoint_coords *= output_scale        
+        keypoint_coords *= output_scale
         mutex.release()
 
         first_keypoint = keypoint_coords[0]
@@ -206,9 +231,8 @@ def do_workflow():
     cap.release()
     # cv2.destroyAllWindows()
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main_thread = Thread(target=do_workflow, args=())
     main_thread.start()
     app.run(host="0.0.0.0", debug=True)
-
-    
