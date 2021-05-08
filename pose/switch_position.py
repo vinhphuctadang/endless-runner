@@ -112,20 +112,29 @@ def main():
         else:
             frame = frame[:, ::-1]
         #--------------------------------------------------------------------------#
-        min_scale = max(DST_SIZE[0]/frame.shape[0], DST_SIZE[1]/frame.shape[1])
-        scale_size = (int(min_scale*frame.shape[1]), int(min_scale*frame.shape[0]))
-        scale_frame = cv2.resize(frame, scale_size)
 
-        # print("Scale shaape:", scale_frame.shape)
-        predict_pivot = ((scale_frame.shape[0] - scale_size[1])//2, (scale_frame.shape[1] - scale_size[0])//2)
-        predict_frame = scale_frame[predict_pivot[0]:predict_pivot[0]+DST_SIZE[0], predict_pivot[1]:predict_pivot[1]+DST_SIZE[1]]
-        # from now on, frame works as an input for function get_pose
-        # frame = cv2.resize(frame, DST_SIZE)  # scale image
+        # precompute scale size
+        scale_y = DST_SIZE[0]/frame.shape[0]
+        scale_x = DST_SIZE[1]/frame.shape[1]
+
+        # scale frame to predict pose        
+        predict_frame = cv2.resize(frame, BODY_SIZE)
         predict_frame = predict_frame.astype(np.float32) / 255.0
-
         pose = get_pose(interpreter, predict_frame)
-        render_pose(predict_frame, pose)
-        cv2.imshow('frame', predict_frame)
+        
+        # re-scale pose to fit original frame
+        for key in pose:
+            pose[key]["x"] = int(pose[key]["x"] / scale_x)
+            pose[key]["y"] = int(pose[key]["y"] / scale_y)
+
+        # render and show frame
+        render_pose(frame, pose)
+
+
+        nose = pose["nose"]
+        print("Nose position:", nose['x'])
+
+        cv2.imshow('frame', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
