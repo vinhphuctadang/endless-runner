@@ -16,7 +16,7 @@ THRESHOLD = 0.9
 ratio = BODY_SIZE[0] / DST_SIZE[0]
 
 # Change URI to 0, i.e VIDEO_URI=0, to access camera
-VIDEO_URI = 0 # "datatest/Phuc_Test.mp4"
+VIDEO_URI = "data/stand.mov" # "datatest/Phuc_Test.mp4"
 # VIDEO_URI = '/Users/dcongtinh/Workspace/endless-runner/pose/walking.mov'
 actions = np.load('labels.npy')
 actions = np.unique(actions)
@@ -93,9 +93,7 @@ def main():
     interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
     interpreter.allocate_tensors()
 
-    # Test the model on random input data.
-    print('Starting camera...')
-    # input_data = cv2.imread('./pose_scaled.png')
+    print('Starting movie stream...')
 
     cap = cv2.VideoCapture(VIDEO_URI)
     num_frame, frame_seq = 0, []
@@ -109,23 +107,29 @@ def main():
         num_frame += 1
         if type(VIDEO_URI) == int:
             frame = cv2.flip(frame, 1)
-        else:
-            frame = frame[:, ::-1]
+        # else:
+        #     frame = frame[:, ::-1]
         #--------------------------------------------------------------------------#
-        min_scale = max(DST_SIZE[0]/frame.shape[0], DST_SIZE[1]/frame.shape[1])
-        scale_size = (int(min_scale*frame.shape[1]), int(min_scale*frame.shape[0]))
-        scale_frame = cv2.resize(frame, scale_size)
 
-        # print("Scale shaape:", scale_frame.shape)
-        predict_pivot = ((scale_frame.shape[0] - scale_size[1])//2, (scale_frame.shape[1] - scale_size[0])//2)
-        predict_frame = scale_frame[predict_pivot[0]:predict_pivot[0]+DST_SIZE[0], predict_pivot[1]:predict_pivot[1]+DST_SIZE[1]]
-        # from now on, frame works as an input for function get_pose
-        # frame = cv2.resize(frame, DST_SIZE)  # scale image
+        # precompute scale size
+        scale_y = DST_SIZE[0]/frame.shape[0]
+        scale_x = DST_SIZE[1]/frame.shape[1]
+
+        # # scale frame to predict pose        
+        predict_frame = cv2.resize(frame, BODY_SIZE)
         predict_frame = predict_frame.astype(np.float32) / 255.0
-
         pose = get_pose(interpreter, predict_frame)
-        render_pose(predict_frame, pose)
-        cv2.imshow('frame', predict_frame)
+        
+        # # re-scale pose to fit original frame
+        for key in pose:
+            pose[key]["x"] = int(pose[key]["x"] / scale_x)
+            pose[key]["y"] = int(pose[key]["y"] / scale_y)
+
+        # # render and show frame
+        render_pose(frame, pose)
+        # nose = pose["nose"]
+
+        cv2.imshow('frame', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
