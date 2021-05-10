@@ -1,2 +1,9 @@
+<<<<<<< HEAD
 .DS_Store
 __pycache__
+=======
+results
+.DS_Store
+__pycache__
+normalized
+>>>>>>> human-action-recognition

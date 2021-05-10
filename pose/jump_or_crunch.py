@@ -1,142 +1,106 @@
 #
 # Vinh Phuc Ta Dang ft Dao Cong Tinh
 #
-from tensorflow.keras.models import load_model
-import tensorflow as tf
-import numpy as np
-import math
+import os
+import sys
+# add search path
+sys.path.append("../")
+
 import cv2
-import pose_decoder
+import posenet
+import numpy as np
 from constants import *
+from threading import Thread, Lock
+from scipy.spatial.distance import euclidean
+from tensorflow.keras.models import load_model
+from flask import Flask, render_template, Response
+from tensorflow.compat.v1.keras.backend import get_session
 
-MODEL_PATH = 'model/posenet_mobilenet_v1_100_257x257_multi_kpt_stripped.tflite'
-BODY_SIZE = (257, 257)
-DST_SIZE = (257, 257)
-THRESHOLD = 0.9
-ratio = BODY_SIZE[0] / DST_SIZE[0]
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-# Change URI to 0, i.e VIDEO_URI=0, to access camera
-VIDEO_URI = "data/stand.mov" # "datatest/Phuc_Test.mp4"
-# VIDEO_URI = '/Users/dcongtinh/Workspace/endless-runner/pose/walking.mov'
-actions = np.load('labels.npy')
-actions = np.unique(actions)
-model_loaded = load_model('../research/lstm_keras.h5')
-# Doing the legend steps:
-# tf.lite.Interpreter() -> transform data -> run inferences -> Interprete output
+scale_factor = 0.5
+VIDEO_URI = "../data/stand.mov"
+MODEL_DIR = "server/_models/pose_clf_20210324_090942.h5"
+LABEL_DIR = "server/_models/labels.npy"
+
 fontFace = cv2.FONT_HERSHEY_SIMPLEX
 fontScale, thickness = 0.75, 2
 
-input_details = None 
-output_details = None 
-def get_pose(interpreter, frame):
-    # Get input and output tensors.
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-    interpreter.set_tensor(input_details[0]['index'], [frame])
-    # execute the network
-    interpreter.invoke()
+app = Flask(__name__)
 
-    # The function `get_tensor()` returns a copy of the tensor data.
-    # Use `tensor()` in order to get a pointer to the tensor.
-    heatmaps = interpreter.get_tensor(output_details[0]['index'])
-    offsets  = interpreter.get_tensor(output_details[1]['index'])
-    displacement_fwd = interpreter.get_tensor(output_details[2]['index'])
-    displacement_bwd = interpreter.get_tensor(output_details[3]['index'])
-    # print("Heat shape:", heatmaps.squeeze(axis=0).shape)
-    pose_scores, keypoint_scores, keypoint_coords = pose_decoder.decode_multiple_poses(
-        heatmaps.squeeze(axis=0),
-        offsets.squeeze(axis=0),
-        displacement_fwd.squeeze(axis=0),
-        displacement_bwd.squeeze(axis=0),
-        output_stride=32, # (height - 1) / output_stride + 1 = 9, height = 257
-        max_pose_detections=1,
-        min_pose_score=0.1
-    )
+cap             = None
+frame_series    = None
+frame_seq       = None
+frame_count     = None
+# tf session
+sess            = None
+model_cfg       = None
+model_outputs   = None
+output_stride   = None
 
-    keypoint_coord = keypoint_coords[0]
-    keypoint_score = keypoint_scores[0]
-    result = {}
-    for idx in range(NUM_KEYPOINTS):
-        result[PART_NAMES[idx]] = {
-            'x': int(keypoint_coord[idx][1]),
-            'y': int(keypoint_coord[idx][0]),
-            'c': keypoint_score[idx]
-        }
-    return result
+pose_scores     = None
+keypoint_scores = None
+keypoint_coords = None
 
-def render_pose(frame, result):
-    for key in result:
-        if result[key]['c'] == 0: 
-            continue
-        point = result[key]['x'], result[key]['y']
-        # print("Point:", point)
-        cv2.circle(frame, point, 1, (0, 255, 0), 2)
-    # render result
-    for edge in CONNECTED_PART_NAMES:
-        if result[edge[0]]['c'] == 0 or result[edge[1]]['c'] == 0: 
-            continue
-        cv2.line(
-            frame,
-            (result[edge[0]]['x'], result[edge[0]]['y']),
-            (result[edge[1]]['x'], result[edge[1]]['y']),
-            (0, 0, 255),
-            2
-        )
-    return frame
-
-def sigmoid(x):
-    return 1/(1 + math.exp(-x))
+get_img         = None
 
 def main():
-    global input_details, output_details
+    model_loaded = load_model(MODEL_DIR)
 
-    interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
-    interpreter.allocate_tensors()
-
-    print('Starting movie stream...')
-
+    sess = get_session()
+    model_cfg, model_outputs = posenet.load_model(101, sess)
+    output_stride = model_cfg['output_stride']
     cap = cv2.VideoCapture(VIDEO_URI)
-    num_frame, frame_seq = 0, []
+    flip = True
+
+    # load model:
+    #
+    model_loaded = load_model(MODEL_DIR)
+
+    sess = get_session()
+    model_cfg, model_outputs = posenet.load_model(101, sess)
+    output_stride = model_cfg['output_stride']
+    cap = cv2.VideoCapture(VIDEO_URI)
+
+    flip = True
+    # cap.set(3, 257)
+    # cap.set(4, 257)
+    frame_count = 0
+    frame_series, frame_seq = [], []
     label = 'idle'
-
     while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("End Video.")
-            break
-        num_frame += 1
-        if type(VIDEO_URI) == int:
-            frame = cv2.flip(frame, 1)
-        # else:
-        #     frame = frame[:, ::-1]
-        #--------------------------------------------------------------------------#
+        input_image, display_image, output_scale = posenet.read_cap(
+            cap, flip=flip, scale_factor=scale_factor, output_stride=output_stride
+        )
+        # without action prediction
+        heatmaps_result, offsets_result, displacement_fwd_result, displacement_bwd_result = sess.run(
+            model_outputs,
+            feed_dict={'image:0': input_image}
+        )
+        pose_scores, keypoint_scores, keypoint_coords = posenet.decode_multi.decode_multiple_poses(
+            heatmaps_result.squeeze(axis=0),
+            offsets_result.squeeze(axis=0),
+            displacement_fwd_result.squeeze(axis=0),
+            displacement_bwd_result.squeeze(axis=0),
+            output_stride=output_stride,
+            min_pose_score=0.25)
+        keypoint_coords *= output_scale
 
-        # precompute scale size
-        scale_y = DST_SIZE[0]/frame.shape[0]
-        scale_x = DST_SIZE[1]/frame.shape[1]
+        first_keypoint = keypoint_coords[0]
+        nose = first_keypoint[0]
+        for i in range(1, len(first_keypoint)):
+            feature.append(euclidean(nose, first_keypoint[i]))
 
-        # # scale frame to predict pose        
-        predict_frame = cv2.resize(frame, BODY_SIZE)
-        predict_frame = predict_frame.astype(np.float32) / 255.0
-        pose = get_pose(interpreter, predict_frame)
-        
-        # # re-scale pose to fit original frame
-        for key in pose:
-            pose[key]["x"] = int(pose[key]["x"] / scale_x)
-            pose[key]["y"] = int(pose[key]["y"] / scale_y)
+        overlay_image = posenet.draw_skel_and_kp(
+            display_image, pose_scores, keypoint_scores, keypoint_coords,
+            min_pose_score=0.15, min_part_score=0.15)
+        cv2.putText(overlay_image, label, (20, 20), fontFace, fontScale=fontScale, color=(0, 255, 0), thickness=thickness)
 
-        # # render and show frame
-        render_pose(frame, pose)
-        # nose = pose["nose"]
-
-        cv2.imshow('frame', frame)
+        get_img = overlay_image
+        cv2.imshow('Posenet', overlay_image)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-
-    # destruction
     cap.release()
-    cv2.destroyAllWindows()
-
 
 if __name__ == '__main__':
     main()

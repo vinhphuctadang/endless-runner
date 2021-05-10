@@ -31,7 +31,17 @@ def read_cap(cap, flip=False, scale_factor=1.0, output_stride=16):
     if not res:
         raise IOError("webcam failure")
 
-    img = cv2.resize(img, (375, 480))
+# <<<<<<< HEAD
+#     img = cv2.resize(img, (375, 480))
+# =======
+#     # img = cv2.resize(img, (375, 480))
+#     BODY_SIZE = (540, 680)
+#     pivotY = (img.shape[0] - BODY_SIZE[0]) // 2
+#     pivotX = (img.shape[1] - BODY_SIZE[0]) // 2
+#     img = img[pivotY:pivotY+BODY_SIZE[1],
+#               pivotX:pivotX+BODY_SIZE[0]]
+# >>>>>>> human-action-recognition
+
     if flip:
         img = cv2.flip(img, 1)  # Flip horizontal
     return _process_input(img, scale_factor, output_stride)
