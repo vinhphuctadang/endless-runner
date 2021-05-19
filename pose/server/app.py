@@ -32,7 +32,7 @@ app = Flask(__name__)
 cap             = None
 frame_series    = None
 frame_seq       = None
-frame_count     = None
+
 # tf session
 sess            = None
 model_cfg       = None
@@ -156,7 +156,7 @@ def video_feed():
 
 
 def do_workflow():
-    global cap, frame_count, frame_series, frame_seq, label, model_cfg, model_outputs, output_stride
+    global cap, frame_series, frame_seq, label, model_cfg, model_outputs, output_stride
     global pose_scores, keypoint_scores, keypoint_coords
 
     global actions, model_loaded, current_action
@@ -174,7 +174,6 @@ def do_workflow():
     flip = True
     # cap.set(3, 257)
     # cap.set(4, 257)
-    frame_count = 0
     frame_series, frame_seq = [], []
     label = 'idle'
     while True:
@@ -198,23 +197,26 @@ def do_workflow():
         mutex.release()
 
         first_keypoint = keypoint_coords[0]
-        nose = first_keypoint[0]
-        feature = []
-        for i in range(1, len(first_keypoint)):
-            feature.append(euclidean(nose, first_keypoint[i]))
-
-        frame_count += 1
-        frame_seq.append(feature)
-        if frame_count % window_size == 0:
-            frame_seq = np.array(frame_seq)
-            frame_seq = np.expand_dims(frame_seq, axis=0)
-            pred = model_loaded.predict(frame_seq)[0]
-            pred = np.argmax(pred)
-            mutex.acquire()
-            current_action = actions[pred]
-            label = current_action
-            mutex.release()
+        if len(np.unique(first_keypoint)) > 1:
+            nose = first_keypoint[0]
+            feature = []
+            for i in range(1, len(first_keypoint)):
+                feature.append(euclidean(nose, first_keypoint[i]))
+            frame_seq.append(feature)
+            if len(frame_seq) % window_size == 0:
+                frame_seq = np.array(frame_seq)
+                frame_seq = np.expand_dims(frame_seq, axis=0)
+                pred = model_loaded.predict(frame_seq)[0]
+                pred = np.argmax(pred)
+                mutex.acquire()
+                current_action = actions[pred]
+                label = current_action
+                mutex.release()
+                frame_seq = []
+        else:
+            label = "idle"
             frame_seq = []
+
 
         overlay_image = posenet.draw_skel_and_kp(
             display_image, pose_scores, keypoint_scores, keypoint_coords,
