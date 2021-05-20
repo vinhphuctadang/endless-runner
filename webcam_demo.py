@@ -1,4 +1,6 @@
 import tensorflow as tf
+tf = tf.compat.v1
+
 import cv2
 import time
 import argparse
@@ -50,8 +52,8 @@ def main():
             input_image, display_image, output_scale = posenet.read_cap(
                 cap, flip=flip, scale_factor=args.scale_factor, output_stride=output_stride)
 
-            if input_image == None:
-                break
+            # if not input_image:
+            #     break
             # time when we finish processing for this frame
             new_frame_time = time.time()
 

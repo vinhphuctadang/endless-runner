@@ -1,6 +1,8 @@
 import json
 import struct
 import tensorflow as tf
+tf = tf.compat.v1 
+
 from tensorflow.python.tools.freeze_graph import freeze_graph
 import cv2
 import numpy as np
