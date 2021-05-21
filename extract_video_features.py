@@ -11,7 +11,8 @@ import os
 # import posenet.constants as constants
 
 SCORE_THRESHOLD = 0.15
-TARGET_FILE = "stand.csv"
+TARGET_FILE = "crunch.csv"
+SOURCE_FILE = "./pose/data/test.mov"
 REWRITE = True
 
 # def extract_feature(keypoint_scores, keypoint_coords, SCORE_THRESHOLD=0.15):
@@ -52,7 +53,7 @@ def main():
         # re-scale for faster detection
         scale_factor = 1/6
 
-        source_name = "./pose/data/stand.mov"
+        source_name = SOURCE_FILE
         # set capture source
         cap = cv2.VideoCapture(source_name)
 
