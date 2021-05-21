@@ -1,3 +1,4 @@
+from numpy.lib.utils import source
 import tensorflow as tf
 tf = tf.compat.v1
 
@@ -5,31 +6,32 @@ import cv2
 import time
 import posenet
 import posenet.constants as consts
-
-from sklearn.metrics import pairwise_distances as distance
+import pandas as pd
+import os
 # import posenet.constants as constants
 
 SCORE_THRESHOLD = 0.15
+TARGET_FILE = "stand.csv"
+REWRITE = True
 
-def extract_feature(keypoint_scores, keypoint_coords, SCORE_THRESHOLD=0.15):
-    # features = []
-    # compute euclidian distance from keypoint[0] -> others
-    # for index in range(1, len(keypoint_scores)):
-    #     if keypoint_scores[index] > SCORE_THRESHOLD:
-    #         features.append(distance(keypoint_scores[index], keypoint_scores[index]))
-    features = distance(keypoint_coords[0:1], keypoint_coords[1:])[0]
-    for index in range(1, len(keypoint_scores)):
-        if keypoint_scores[index] < SCORE_THRESHOLD:
-            features[index - 1] = 0
-    # normalize
-    mx = max(features)
-    for index in range(len(features)):
-        features[index] = features[index] / mx
+# def extract_feature(keypoint_scores, keypoint_coords, SCORE_THRESHOLD=0.15):
+#     # features = []
+#     # compute euclidian distance from keypoint[0] -> others
+#     # for index in range(1, len(keypoint_scores)):
+#     #     if keypoint_scores[index] > SCORE_THRESHOLD:
+#     #         features.append(distance(keypoint_scores[index], keypoint_scores[index]))
+#     features = distance(keypoint_coords[0:1], keypoint_coords[1:])[0]
+#     for index in range(1, len(keypoint_scores)):
+#         if keypoint_scores[index] < SCORE_THRESHOLD:
+#             features[index - 1] = 0
+#     # normalize
+#     mx = max(features)
+#     for index in range(len(features)):
+#         features[index] = features[index] / mx
 
-    return features
+#     return features
 
 def draw_skel_and_kp_showing_feature(display_image, keypoint_scores, keypoint_coords, min_part_score=0.1):
-
     origin = tuple(map(int, keypoint_coords[0]))
     for index in range(1, len(keypoint_scores)):
         if keypoint_scores[index] < min_part_score: # or keypoint_scores[indexes[1]] < min_part_score:
@@ -38,8 +40,6 @@ def draw_skel_and_kp_showing_feature(display_image, keypoint_scores, keypoint_co
             continue
         target = tuple(map(int, keypoint_coords[index]))
         display_image = cv2.line(display_image, (origin[1], origin[0]), (target[1], target[0]), (255, 0, 0), 1)
-
-
 
 def main():
     model = 101
@@ -52,8 +52,13 @@ def main():
         # re-scale for faster detection
         scale_factor = 1/6
 
+        source_name = "./pose/data/stand.mov"
         # set capture source
-        cap = cv2.VideoCapture("./pose/data/stand.mov")
+        cap = cv2.VideoCapture(source_name)
+
+
+        # split file name
+        target_file = TARGET_FILE
         
         # start = time.time()
         frame_count = 0
@@ -64,9 +69,19 @@ def main():
         # used to record the time at which we processed current frame
         new_frame_time = 0
 
+        # df 
+        if not REWRITE and os.path.isfile(target_file):
+            df = pd.read_csv(target_file)
+        else:
+            df = pd.DataFrame({"keypoint_coords": [], "keypoint_scores": []}) 
+    
         while True:
-            input_image, display_image, output_scale = posenet.read_cap(
-                cap, flip=flip, scale_factor=scale_factor, output_stride=output_stride)
+            try:
+                input_image, display_image, output_scale = posenet.read_cap(
+                    cap, flip=flip, scale_factor=scale_factor, output_stride=output_stride)
+            except Exception as err:
+                print("Error: Read cap. Details:", err)
+                break 
 
             # time when we finish processing for this frame
             new_frame_time = time.time()
@@ -95,11 +110,10 @@ def main():
                 max_pose_detections = 1,
                 min_pose_score      = SCORE_THRESHOLD)
 
-            original_coords = keypoint_coords 
+            # original_coords = keypoint_coords 
             keypoint_coords *= output_scale
 
-            print("keypoints:", keypoint_coords)
-            print("distance:", extract_feature(keypoint_scores[0], keypoint_coords[0], SCORE_THRESHOLD))
+            # print("keypoints:", keypoint_coords)
            
             display_image = posenet.draw_fps(display_image, fps)
             display_image = posenet.draw_skel_and_kp(
@@ -107,12 +121,22 @@ def main():
                 min_pose_score=0.15, min_part_score=SCORE_THRESHOLD)
             draw_skel_and_kp_showing_feature(display_image, keypoint_scores[0], keypoint_coords[0], min_part_score=SCORE_THRESHOLD)
 
+            # save key points to data frame:
+            # flatten
+            keypoint_coords_list = []
+            for coord in keypoint_coords[0]: keypoint_coords_list.append(list(coord))
+            keypoint_scores_list = list(keypoint_scores[0])
+
+            # print("keypoints:", keypoint_coords_flattened)
+            # append to dataframe (ignoring index)
+            df = df.append(dict(zip(df.columns, [keypoint_coords_list, keypoint_scores_list])), ignore_index=True)
+
             cv2.imshow('posenet', display_image)
             frame_count += 1
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-
+        df.to_csv(target_file)
 
 if __name__ == "__main__":
     main()
