@@ -20,6 +20,7 @@ parser.add_argument('--file', type=str, default=None,
 args = parser.parse_args()
 
 STAND_CRUNCH_LABELS = ["stand", "crunch"]
+LANE_LABELS = ["left", "middle", "right"]
 MIN_KEYPOINT_TO_PREDICT = 8
 
 def extract_feature(keypoint_coords):
@@ -51,6 +52,23 @@ def predict(model, keypoint_coords):
     # return label
     return posture_label
 
+# return lane in within frame
+def get_lane(frame, keypoint_coords):
+    
+    x1 = frame.shape[1] // 3
+    x2 = frame.shape[1] // 3 * 2
+
+    # for simplicity, just base on nose position
+    nose = keypoint_coords[0]
+
+    # nose[1] presents nose on x-axis
+    if nose[1] <= x1: 
+        return LANE_LABELS[0]
+    if nose[1] <= x2:
+        return LANE_LABELS[1]
+
+    return LANE_LABELS[2]
+    
 def main():
     with open("stand_crunch.model", "rb") as f:
         stand_crunch_model = pickle.load(f)
@@ -136,7 +154,8 @@ def main():
             # stand or crunch
             if len(keypoint_coords) > 0:
                 posture_label = predict(stand_crunch_model, keypoint_coords[0])
-                display_image = posenet.draw_string(display_image, str(posture_label))
+                lane_label = get_lane(display_image, keypoint_coords[0])
+                display_image = posenet.draw_string(display_image, posture_label + ", lane: " + lane_label)
 
             # TODO this isn't particularly fast, use GL for drawing and display someday...
             overlay_image = posenet.draw_skel_and_kp(
