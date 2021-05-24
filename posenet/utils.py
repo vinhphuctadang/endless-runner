@@ -121,10 +121,18 @@ def draw_skel_and_kp(
                             isClosed=False, color=(255, 255, 0))
     return out_img
 
-
+# should draw string only
+# should be deprecated 
 def draw_fps(img, fps):
     fps = str(fps)
     out_img = img
     font = cv2.FONT_HERSHEY_SIMPLEX
     cv2.putText(out_img, fps, (7, 70), font, 3, (100, 255, 0), 3, cv2.LINE_AA)
+    return out_img
+
+
+def draw_string(img, s):
+    out_img = img
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(out_img, s, (7, 70), font, 3, (100, 255, 0), 3, cv2.LINE_AA)
     return out_img

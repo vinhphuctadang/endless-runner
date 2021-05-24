@@ -1,3 +1,4 @@
+from numpy.lib.function_base import disp
 from numpy.lib.utils import source
 import tensorflow as tf
 tf = tf.compat.v1
@@ -12,8 +13,9 @@ import os
 
 SCORE_THRESHOLD = 0.15
 TARGET_FILE = "crunch.csv"
-SOURCE_FILE = "./pose/data/test.mov"
-REWRITE = True
+SOURCE_FILE = "./pose/data/crunch_2.mov"
+REWRITE = False
+DRY_RUN = False # whether or not to write to file
 
 # def extract_feature(keypoint_scores, keypoint_coords, SCORE_THRESHOLD=0.15):
 #     # features = []
@@ -32,7 +34,7 @@ REWRITE = True
 
 #     return features
 
-def draw_skel_and_kp_showing_feature(display_image, keypoint_scores, keypoint_coords, min_part_score=0.1):
+def draw_skel_and_kp_showing_feature(display_image, keypoint_scores, keypoint_coords, min_part_score=0.15):
     origin = tuple(map(int, keypoint_coords[0]))
     for index in range(1, len(keypoint_scores)):
         if keypoint_scores[index] < min_part_score: # or keypoint_scores[indexes[1]] < min_part_score:
@@ -42,6 +44,29 @@ def draw_skel_and_kp_showing_feature(display_image, keypoint_scores, keypoint_co
         target = tuple(map(int, keypoint_coords[index]))
         display_image = cv2.line(display_image, (origin[1], origin[0]), (target[1], target[0]), (255, 0, 0), 1)
 
+def draw_sparse_skel(display_image, keypoint_scores, keypoint_coords, min_part_score=0.1, point_per_edge = 5):
+    # assert(type(point_per_edge) == "int" and point_per_edge > 0)
+    # print(keypoint_scores)
+    pairs = list(consts.CONNECTED_PART_INDICES)
+    for x, y in pairs:
+        if keypoint_scores[x] < min_part_score or keypoint_scores[y] < min_part_score:
+            continue
+        # generate points from coords[x] to coords[y]
+        A, B = keypoint_coords[x], keypoint_coords[y]
+        vector = ((B[0] - A[0])/point_per_edge, (B[1] - A[1])/point_per_edge)
+        for i in range(point_per_edge + 1):
+            C = (int(A[0] + vector[0] * i), int(A[1] + vector[1] * i))
+            display_image = cv2.circle(display_image, (C[1], C[0]), 3, color=(0, 255, 0), thickness=3)
+
+    for partId in range(5): # 5 first parts containng nose, left, right eyes, ears
+        # draw nose as well
+        if keypoint_scores[partId] < min_part_score:
+            continue
+        C = keypoint_coords[partId]
+        display_image = cv2.circle(display_image, (int(C[1]), int(C[0])), 3, color=(0, 255, 0), thickness=3)
+            
+    return display_image
+        
 def main():
     model = 101
     with tf.Session() as sess:
@@ -72,7 +97,7 @@ def main():
 
         # df 
         if not REWRITE and os.path.isfile(target_file):
-            df = pd.read_csv(target_file)
+            df = pd.read_csv(target_file, index_col=0)
         else:
             df = pd.DataFrame({"keypoint_coords": [], "keypoint_scores": []}) 
     
@@ -120,7 +145,7 @@ def main():
             display_image = posenet.draw_skel_and_kp(
                 display_image, pose_scores, keypoint_scores, keypoint_coords,
                 min_pose_score=0.15, min_part_score=SCORE_THRESHOLD)
-            draw_skel_and_kp_showing_feature(display_image, keypoint_scores[0], keypoint_coords[0], min_part_score=SCORE_THRESHOLD)
+            # draw_sparse_skel(display_image, keypoint_scores[0], keypoint_coords[0], min_part_score=SCORE_THRESHOLD)
 
             # save key points to data frame:
             # flatten
@@ -130,14 +155,18 @@ def main():
 
             # print("keypoints:", keypoint_coords_flattened)
             # append to dataframe (ignoring index)
-            df = df.append(dict(zip(df.columns, [keypoint_coords_list, keypoint_scores_list])), ignore_index=True)
+
+            if not DRY_RUN:
+                df = df.append(dict(zip(df.columns, [keypoint_coords_list, keypoint_scores_list])), ignore_index=True)
 
             cv2.imshow('posenet', display_image)
             frame_count += 1
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-        df.to_csv(target_file)
+
+        if not DRY_RUN:
+            df.to_csv(target_file)
 
 if __name__ == "__main__":
     main()

@@ -5,8 +5,9 @@ import cv2
 import time
 import argparse
 import csv
-
 import posenet
+import pickle 
+from sklearn.metrics import pairwise_distances as distance
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model', type=int, default=101)
@@ -18,21 +19,57 @@ parser.add_argument('--file', type=str, default=None,
                     help="Optionally use a video file instead of a live camera")
 args = parser.parse_args()
 
+STAND_CRUNCH_LABELS = ["stand", "crunch"]
+MIN_KEYPOINT_TO_PREDICT = 8
+
+def extract_feature(keypoint_coords):
+    features = distance(keypoint_coords[0:1], keypoint_coords[1:])[0]
+    # normalize
+    mx = max(features)
+    mn = min(features)
+    for index in range(len(features)):
+        features[index] = (features[index] - mn) / (mx-mn)
+    return features
+
+def predict(model, keypoint_coords):
+    feature = extract_feature(keypoint_coords)
+    print("posture feature:", feature)
+
+    # detect number of zero feature:
+    known_points_count = len(feature[feature > 0.])
+    # if too many zero then return unknown
+    if known_points_count < MIN_KEYPOINT_TO_PREDICT:
+        return "unknown"
+    # otherwise predict
+    try:
+        posture = model.predict([feature])[0]
+        posture_label = STAND_CRUNCH_LABELS[posture]
+    except Exception as e:
+        # if error happend returns unknown
+        print("Error happened:", e)
+        posture_label = "unknown"
+    # return label
+    return posture_label
 
 def main():
+    with open("stand_crunch.model", "rb") as f:
+        stand_crunch_model = pickle.load(f)
+
     with tf.Session() as sess:
         model_cfg, model_outputs = posenet.load_model(args.model, sess)
         output_stride = model_cfg['output_stride']
 
-        if args.file is not None:
-            cap = cv2.VideoCapture(args.file)
-            flip = False
-        else:
-            cap = cv2.VideoCapture(args.cam_id)
-            flip = True
-        cap.set(3, args.cam_width)
-        cap.set(4, args.cam_height)
+        # if args.file is not None:
+        #     cap = cv2.VideoCapture(args.file)
+        #     flip = False
+        # else:
+        #     cap = cv2.VideoCapture(args.cam_id)
+        flip = True
 
+        cap = cv2.VideoCapture(0)
+        # cap.set(3, args.cam_width)
+        # cap.set(4, args.cam_height)
+        scale_factor = 1/5
         start = time.time()
         frame_count = 0
 
@@ -50,7 +87,7 @@ def main():
 
         while True:
             input_image, display_image, output_scale = posenet.read_cap(
-                cap, flip=flip, scale_factor=args.scale_factor, output_stride=output_stride)
+                cap, flip=flip, scale_factor=scale_factor, output_stride=output_stride)
 
             # if not input_image:
             #     break
@@ -95,17 +132,16 @@ def main():
                 position.append(i + 1)
                 x_coordinates.append(j[0])
                 y_coordinates.append(j[1])
-            # print(
-            #     f'Frame is {frame}, body pos {position}, x value {x_coordinates}, y value {y_coordinates}')
-
-            display_image = posenet.draw_fps(display_image, fps)
+            
+            # stand or crunch
+            if len(keypoint_coords) > 0:
+                posture_label = predict(stand_crunch_model, keypoint_coords[0])
+                display_image = posenet.draw_string(display_image, str(posture_label))
 
             # TODO this isn't particularly fast, use GL for drawing and display someday...
             overlay_image = posenet.draw_skel_and_kp(
                 display_image, pose_scores, keypoint_scores, keypoint_coords,
-                min_pose_score=0.15, min_part_score=0.1)
-
-            # print(keypoint_coords[0])
+                min_pose_score=0.15, min_part_score=0.15)
 
             cv2.imshow('posenet', overlay_image)
             frame_count += 1
@@ -115,8 +151,8 @@ def main():
 
             # print('Average FPS: ', frame_count / (time.time() - start))
             # print('Average FPS: ', fps)
-            rows = zip(action_name, frame, position,
-                       x_coordinates, y_coordinates)
+            # rows = zip(action_name, frame, position,
+            #            x_coordinates, y_coordinates)
 
             # with open('dataset.csv','a') as f:
             #     writer = csv.writer(f)
