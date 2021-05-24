@@ -7,7 +7,7 @@ project_dirname = '/Users/dcongtinh/Workspace/endless-runner'  # os.getcwd()
 # project_dirname = os.path.join(project_dirname, 'train', 'CNN')
 project_dirname = os.path.join(project_dirname)  # Run code Jupyter
 
-epochs = 100
+epochs = 50
 batch_size = 1
 learning_rate = 1e-5
 weight_decay = 1e-4
