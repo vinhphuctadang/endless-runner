@@ -11,10 +11,11 @@ import numpy as np
 from constants import *
 # import tensorflow as tf
 from scipy.spatial.distance import euclidean
+from sklearn.metrics import pairwise_distances as distance
 from tensorflow.compat.v1.keras import backend as K
 
 VID_EXT_VALIDS = ['.mp4', '.mov']
-scale_factor = 0.5
+scale_factor = 0.4 # 0.5
 VIDEO_URI = 0
 GUI_Enable = True
 oo = 1e9
@@ -22,20 +23,13 @@ oo = 1e9
 
 
 def normalize(keypoint_coords):
-    first_keypoint = keypoint_coords[0]
-    nose, feature = first_keypoint[0], []
-    mn, mx = oo, -oo
-    for i in range(1, len(first_keypoint)):
-        dist = euclidean(nose, first_keypoint[i])
-        feature.append(dist)
-
-    feature = np.array(feature)
-    mx = np.max(feature)
-    mn = np.min(feature)
-    # norm = np.linalg.norm(feature)
-    # normalized_feature = feature/norm
-    normalized_feature = np.array([(val-mn)/(mx-mn) for val in feature])
-    return normalized_feature
+    features = distance(keypoint_coords[0:1], keypoint_coords[1:])[0]
+    # normalize
+    mx = max(features)
+    mn = min(features)
+    for index in range(len(features)):
+        features[index] = (features[index] - mn) / (mx - mn)
+    return features
 
 def extractFeatures(VIDEO_URI):
     sess = K.get_session()
@@ -44,11 +38,16 @@ def extractFeatures(VIDEO_URI):
 
     cap = cv2.VideoCapture(VIDEO_URI)
     flip = False
-    cap.set(3, 257)
-    cap.set(4, 257)
+    # cap.set(3, 257)
+    # cap.set(4, 257)
     frame_count = 0
     frame_series, frame_seq = [], []
 
+    # used to record the time when we processed last frame
+    prev_frame_time = 0
+
+    # used to record the time at which we processed current frame
+    new_frame_time = 0
     print('Extracting video ' + VIDEO_URI + '...')
     while True:
         try:
@@ -57,6 +56,19 @@ def extractFeatures(VIDEO_URI):
         except:
             print("End video %s.%d\n" % (VIDEO_URI, len(frame_series)))
             break
+
+        # time when we finish processing for this frame
+        new_frame_time = time.time()
+
+        # Calculating the fps
+        # fps will be number of frame processed in given time frame
+        # since their will be most of time error of 0.001 second
+        # we will be subtracting it to get more accurate result
+        fps = 1 / (new_frame_time - prev_frame_time)
+        prev_frame_time = new_frame_time
+
+        # converting the fps into integer
+        fps = int(fps)
 
         heatmaps_result, offsets_result, displacement_fwd_result, displacement_bwd_result = sess.run(
             model_outputs,
@@ -72,15 +84,16 @@ def extractFeatures(VIDEO_URI):
             min_pose_score=0.15)
 
         keypoint_coords *= output_scale
-        normalized_feature = normalize(keypoint_coords)
-        frame_count += 1
+        normalized_feature = normalize(keypoint_coords[0])
+
         frame_seq.append(normalized_feature)
-        if frame_count % window_size == 0:
+        if len(frame_seq) % window_size == 0:
             frame_series.append(frame_seq)
             frame_seq = []
 
         # TODO this isn't particularly fast, use GL for drawing and display someday...
         if GUI_Enable:
+            display_image = posenet.draw_fps(display_image, fps)
             overlay_image = posenet.draw_skel_and_kp(
                 display_image, pose_scores, keypoint_scores, keypoint_coords,
                 min_pose_score=0.15, min_part_score=0.1)
@@ -92,7 +105,7 @@ def extractFeatures(VIDEO_URI):
             #     filename = "walking.png"
 
             # filename = time.strftime('%Y%m%d_%H%M%S') + ".png"
-            cv2.imwrite(filename, overlay_image)
+            # cv2.imwrite(filename, overlay_image)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
@@ -111,7 +124,7 @@ for action in classes:
         total = 0
         for vid in os.listdir(action_dir):
             name, ext = os.path.splitext(vid)
-            if ext in VID_EXT_VALIDS and name in "Tinh_Running":
+            if ext in VID_EXT_VALIDS:
                 video_path = os.path.join(action_dir, vid)
                 keyPoints = extractFeatures(video_path)
                 labels = np.append(labels, np.array(
@@ -124,4 +137,12 @@ for action in classes:
         print("Total: %d" % total)
 time_end = time.time()
 
+# View result
+print('Norm_MinMax_New_%02d' % window_size)
+print('Total-time: %.6f (s)' % (time_end - time_start))
+print('actions.shape =', actions.shape)
+print('labels.shape =', labels.shape)
 
+# Store data numpy array
+np.save('normalized/Norm_MinMax_New_%02d_X.npy' % window_size, actions)
+np.save('normalized/Norm_MinMax_New_%02d_y.npy' % window_size, labels)
