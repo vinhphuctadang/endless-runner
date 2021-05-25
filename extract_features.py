@@ -11,7 +11,6 @@ import numpy as np
 from constants import *
 # import tensorflow as tf
 from scipy.spatial.distance import euclidean
-from sklearn.metrics import pairwise_distances as distance
 from tensorflow.compat.v1.keras import backend as K
 
 VID_EXT_VALIDS = ['.mp4', '.mov']
@@ -19,17 +18,28 @@ scale_factor = 0.4 # 0.5
 VIDEO_URI = 0
 GUI_Enable = True
 oo = 1e9
+SCORE_THRESHOLD = 0.15
 
+def normalize(features):
+    mx = np.max(features)
+    mn = np.min(features)
+    for feature in features:
+        for i in range(len(feature)):
+            feature[i] = (feature[i] - mn) / (mx - mn)
 
+    return np.array(features)
 
-def normalize(keypoint_coords):
-    features = distance(keypoint_coords[0:1], keypoint_coords[1:])[0]
-    # normalize
-    mx = max(features)
-    mn = min(features)
-    for index in range(len(features)):
-        features[index] = (features[index] - mn) / (mx - mn)
-    return features
+def extractFeature(frame_seq):
+    features = []
+    kp_prev = frame_seq[0]
+    for i in range(1, len(frame_seq)):
+        kp_curr = frame_seq[i]
+        dist = []
+        for p_i, p_j in zip(kp_curr, kp_prev):
+            dist.append(euclidean(p_i, p_j))
+        features.append(dist)
+
+    return normalize(features)
 
 def extractFeatures(VIDEO_URI):
     sess = K.get_session()
@@ -38,9 +48,6 @@ def extractFeatures(VIDEO_URI):
 
     cap = cv2.VideoCapture(VIDEO_URI)
     flip = False
-    # cap.set(3, 257)
-    # cap.set(4, 257)
-    frame_count = 0
     frame_series, frame_seq = [], []
 
     # used to record the time when we processed last frame
@@ -81,14 +88,13 @@ def extractFeatures(VIDEO_URI):
             displacement_fwd_result.squeeze(axis=0),
             displacement_bwd_result.squeeze(axis=0),
             output_stride=output_stride,
-            min_pose_score=0.15)
-
+            min_pose_score=SCORE_THRESHOLD)
         keypoint_coords *= output_scale
-        normalized_feature = normalize(keypoint_coords[0])
 
-        frame_seq.append(normalized_feature)
+        frame_seq.append(keypoint_coords[0])
         if len(frame_seq) % window_size == 0:
-            frame_series.append(frame_seq)
+            normalized_feature = extractFeature(frame_seq)
+            frame_series.append(normalized_feature)
             frame_seq = []
 
         # TODO this isn't particularly fast, use GL for drawing and display someday...
@@ -96,16 +102,9 @@ def extractFeatures(VIDEO_URI):
             display_image = posenet.draw_fps(display_image, fps)
             overlay_image = posenet.draw_skel_and_kp(
                 display_image, pose_scores, keypoint_scores, keypoint_coords,
-                min_pose_score=0.15, min_part_score=0.1)
+                min_pose_score=SCORE_THRESHOLD, min_part_score=SCORE_THRESHOLD)
 
             cv2.imshow('posenet', overlay_image)
-            # if "running" in VIDEO_URI:
-            #     filename = "running.png"
-            # else:
-            #     filename = "walking.png"
-
-            # filename = time.strftime('%Y%m%d_%H%M%S') + ".png"
-            # cv2.imwrite(filename, overlay_image)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
@@ -124,7 +123,7 @@ for action in classes:
         total = 0
         for vid in os.listdir(action_dir):
             name, ext = os.path.splitext(vid)
-            if ext in VID_EXT_VALIDS:
+            if ext in VID_EXT_VALIDS and "v2" not in name:
                 video_path = os.path.join(action_dir, vid)
                 keyPoints = extractFeatures(video_path)
                 labels = np.append(labels, np.array(
@@ -138,11 +137,11 @@ for action in classes:
 time_end = time.time()
 
 # View result
-print('Norm_MinMax_New_%02d' % window_size)
+print('Norm_MinMax_Dist2_%02d' % window_size)
 print('Total-time: %.6f (s)' % (time_end - time_start))
 print('actions.shape =', actions.shape)
 print('labels.shape =', labels.shape)
 
 # Store data numpy array
-np.save('normalized/Norm_MinMax_New_%02d_X.npy' % window_size, actions)
-np.save('normalized/Norm_MinMax_New_%02d_y.npy' % window_size, labels)
+np.save('normalized/Norm_MinMax_Dist2_%02d_X.npy' % window_size, actions)
+np.save('normalized/Norm_MinMax_Dist2_%02d_y.npy' % window_size, labels)

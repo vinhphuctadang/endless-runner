@@ -19,18 +19,17 @@ from tensorflow.compat.v1.keras.backend import get_session
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-scale_factor = 0.5
+scale_factor = 0.4
 VIDEO_URI = 0
-MODEL_DIR = "_models/pose_clf_20210324_090942.h5"
-LABEL_DIR = "_models/labels.npy"
+MODEL_DIR = "_models/20210525_203117model.h5"
+SCORE_THRESHOLD = 0.15
 
 fontFace = cv2.FONT_HERSHEY_SIMPLEX
-fontScale, thickness = 0.75, 2
+fontScale, thickness = 1.5, 2
 
 app = Flask(__name__)
 
 cap             = None
-frame_series    = None
 frame_seq       = None
 
 # tf session
@@ -137,26 +136,32 @@ def video_feed():
     return Response(gen(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
-# @app.route("/init")
-# def init():
-#     try:
 
-#     except Exception as e:
-#         return {"code": -1, "message": str(e)}, 500
-#     return {"code": 1}
+def normalize(features):
+    mx = np.max(features)
+    mn = np.min(features)
+    # print(mx, mn)
+    for feature in features:
+        for i in range(len(feature)):
+            feature[i] = (feature[i] - mn) / (mx - mn)
 
-# @app.route("/done")
-# def done():
-#     try:
-#         cap.release()
-#         sess.close()
-#     except Exception as e:
-#         return {"code": -1, "message": str(e)}, 500
-#     return {"code": 1}
+    return np.array(features)
+
+def extractFeature(frame_seq):
+    features = []
+    kp_prev = frame_seq[0] # keypoint prev
+    for i in range(1, len(frame_seq)):
+        kp_curr = frame_seq[i]
+        dist = []
+        for p_i, p_j in zip(kp_curr, kp_prev):
+            dist.append(euclidean(p_i, p_j))
+        features.append(dist)
+
+    return normalize(features)
 
 
 def do_workflow():
-    global cap, frame_series, frame_seq, label, model_cfg, model_outputs, output_stride
+    global cap, frame_seq, label, model_cfg, model_outputs, output_stride
     global pose_scores, keypoint_scores, keypoint_coords
 
     global actions, model_loaded, current_action
@@ -172,9 +177,7 @@ def do_workflow():
 
     cap = cv2.VideoCapture(VIDEO_URI)
     flip = True
-    # cap.set(3, 257)
-    # cap.set(4, 257)
-    frame_series, frame_seq = [], []
+    frame_seq = []
     label = 'idle'
     while True:
         input_image, display_image, output_scale = posenet.read_cap(
@@ -192,46 +195,31 @@ def do_workflow():
             displacement_fwd_result.squeeze(axis=0),
             displacement_bwd_result.squeeze(axis=0),
             output_stride=output_stride,
-            min_pose_score=0.25)
+            min_pose_score=SCORE_THRESHOLD)
         keypoint_coords *= output_scale
         mutex.release()
 
-        first_keypoint = keypoint_coords[0]
-        if len(np.unique(first_keypoint)) > 1:
-            nose = first_keypoint[0]
-            feature = []
-            for i in range(1, len(first_keypoint)):
-                feature.append(euclidean(nose, first_keypoint[i]))
-            frame_seq.append(feature)
-            if len(frame_seq) % window_size == 0:
-                frame_seq = np.array(frame_seq)
-                frame_seq = np.expand_dims(frame_seq, axis=0)
-                pred = model_loaded.predict(frame_seq)[0]
-                pred = np.argmax(pred)
-                mutex.acquire()
-                current_action = actions[pred]
-                label = current_action
-                mutex.release()
-                frame_seq = []
-        else:
-            label = "idle"
+        frame_seq.append(keypoint_coords[0])
+        if len(frame_seq) % window_size == 0:
+            normalized_feature = extractFeature(frame_seq)
+            normalized_feature = np.expand_dims(normalized_feature, axis=0)
+            pred = model_loaded.predict(normalized_feature)[0]
+            idx = np.argmax(pred)
+            mutex.acquire()
+            current_action = actions[idx]
+            label = "%s - %.2f" % (current_action, pred[idx])
+            mutex.release()
             frame_seq = []
-
 
         overlay_image = posenet.draw_skel_and_kp(
             display_image, pose_scores, keypoint_scores, keypoint_coords,
-            min_pose_score=0.15, min_part_score=0.15)
+            min_pose_score=SCORE_THRESHOLD, min_part_score=SCORE_THRESHOLD)
 
-        cv2.putText(overlay_image, label, (20, 20),
+        cv2.putText(overlay_image, label, (20, 40),
                     fontFace, fontScale=fontScale, color=(0, 255, 0), thickness=thickness)
         get_img = overlay_image
-        # print(get_img.shape)
-        # cv2.imshow('Posenet', overlay_image)
-        # if cv2.waitKey(1) & 0xFF == ord('q'):
-        #     break
 
     cap.release()
-    # cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":

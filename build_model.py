@@ -10,13 +10,13 @@ from prettytable import PrettyTable
 from tensorflow.keras.metrics import AUC
 from tensorflow.keras.layers import Dense
 from sklearn.metrics import confusion_matrix
+from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.models import load_model
 from tensorflow.keras.callbacks import CSVLogger
-from tensorflow.keras.layers import LSTM, Dropout, Bidirectional, TimeDistributed
+from tensorflow.keras.layers import LSTM, Dropout
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
-
 
 class model_tools:
 
@@ -35,7 +35,7 @@ class model_tools:
             n_hidden = 16
             if 'lstm' in model_name:
                 model = Sequential(name=model_name)
-                model.add(LSTM(n_hidden, input_shape=(window_size, num_keypoints),
+                model.add(LSTM(n_hidden, input_shape=(window_size-1, num_keypoints),
                                name='lstm_0',
                                activation=activation,
                                return_sequences=False if n_layers == 1 else True
@@ -50,7 +50,7 @@ class model_tools:
                              return_sequences=False if layer == n_layers - 2 else True,
                              )
                     )
-                # model.add(Dense(128, activation='relu'))
+                model.add(Dense(64, activation='relu'))
                 model.add(Dropout(dropout))
                 model.add(Dense(n_classes, activation='softmax'))
                 model.compile(optimizer='adam',
