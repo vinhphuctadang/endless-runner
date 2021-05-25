@@ -30,10 +30,7 @@ def read_cap(cap, flip=False, scale_factor=1.0, output_stride=16):
     res, img = cap.read()
     if not res:
         raise IOError("webcam failure")
-
-# <<<<<<< HEAD
-#     img = cv2.resize(img, (375, 480))
-# =======
+    # img shape = (720, 1080)
     # img = cv2.resize(img, (375, 480))
     BODY_SIZE = (680, 1024)
     pivotY = (img.shape[0] - BODY_SIZE[0]) // 2
