@@ -34,12 +34,12 @@ def read_cap(cap, flip=False, scale_factor=1.0, output_stride=16):
 # <<<<<<< HEAD
 #     img = cv2.resize(img, (375, 480))
 # =======
-#     # img = cv2.resize(img, (375, 480))
-#     BODY_SIZE = (540, 680)
-#     pivotY = (img.shape[0] - BODY_SIZE[0]) // 2
-#     pivotX = (img.shape[1] - BODY_SIZE[0]) // 2
-#     img = img[pivotY:pivotY+BODY_SIZE[1],
-#               pivotX:pivotX+BODY_SIZE[0]]
+    # img = cv2.resize(img, (375, 480))
+    BODY_SIZE = (680, 1024)
+    pivotY = (img.shape[0] - BODY_SIZE[0]) // 2
+    pivotX = (img.shape[1] - BODY_SIZE[0]) // 2
+    img = img[pivotY:pivotY+BODY_SIZE[1],
+              pivotX:pivotX+BODY_SIZE[0]]
 # >>>>>>> human-action-recognition
 
     if flip:
@@ -134,5 +134,5 @@ def draw_fps(img, fps):
 def draw_string(img, s):
     out_img = img
     font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(out_img, s, (7, 70), font, 3, (100, 255, 0), 3, cv2.LINE_AA)
+    cv2.putText(out_img, s, (7, 70), font, 1, (100, 255, 0), 3, cv2.LINE_AA)
     return out_img

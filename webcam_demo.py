@@ -111,6 +111,7 @@ def main():
             #     break
             # time when we finish processing for this frame
             new_frame_time = time.time()
+            print(display_image.shape)
 
             # Calculating the fps
 

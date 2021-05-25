@@ -75,13 +75,13 @@ def main():
         
         # flip the video 
         flip = True
+
         # re-scale for faster detection
-        scale_factor = 1/6
+        scale_factor = 0.4
 
         source_name = SOURCE_FILE
         # set capture source
         cap = cv2.VideoCapture(source_name)
-
 
         # split file name
         target_file = TARGET_FILE
