@@ -21,7 +21,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 scale_factor = 0.4
 VIDEO_URI = 0
-MODEL_DIR = "_models/20210525_203117model.h5"
+MODEL_DIR = "_models/20210525_151927model.h5"
 SCORE_THRESHOLD = 0.15
 
 fontFace = cv2.FONT_HERSHEY_SIMPLEX
