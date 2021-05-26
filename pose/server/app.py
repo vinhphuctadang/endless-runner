@@ -7,6 +7,7 @@ import sys
 sys.path.append("../../")
 
 import cv2
+import pickle
 import posenet
 import numpy as np
 from constants import *
@@ -14,6 +15,7 @@ from threading import Thread, Lock
 from scipy.spatial.distance import euclidean
 from tensorflow.keras.models import load_model
 from flask import Flask, render_template, Response
+from sklearn.metrics import pairwise_distances as distance
 from tensorflow.compat.v1.keras.backend import get_session
 
 
@@ -21,7 +23,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 scale_factor = 0.4
 VIDEO_URI = 0
-MODEL_DIR = "_models/20210525_151927model.h5"
+SEQUENCE_MODEL_DIR = "_models/20210525_151927model.h5"
+STAND_CRUNCH_MODEL_DIR = "_models/stand_crunch.model"
 SCORE_THRESHOLD = 0.15
 
 fontFace = cv2.FONT_HERSHEY_SIMPLEX
@@ -47,7 +50,17 @@ get_img         = None
 # model and action
 current_action  = None
 model_loaded    = None
+stand_crunch_model = None
+
+current_stand_crunch_status = None
+current_lane = None
+
+# constants
 actions = ["idle", "running", "walking"]
+STAND_CRUNCH_LABELS = ["stand", "crunch"]
+LANE_LABELS = ["left", "middle", "right"]
+MIN_KEYPOINT_TO_PREDICT = 8
+
 mutex = Lock()
 
 
@@ -62,36 +75,20 @@ def ping():
 
 @app.route("/pose")
 def get_pose():
-    global pose_scores, keypoint_scores, keypoint_coords
+    return {
+        "code": 1,
+        "action": current_action,
+        "stand_crunch": current_stand_crunch_status,
+        "lane": current_lane
+    }
 
-    mutex.acquire()
-    tmp_coords = []
-    i = 0
-    if keypoint_coords is not None:
-        for coord in keypoint_coords[0]:  # only consider pose 0
-            tmp_coords.append(
-                {
-                    'x': coord[0],
-                    'y': coord[1],
-                    'c': keypoint_scores[0][i]
-                }
-            )
-            i += 1
-
-        result = {
-            "code": "SUCCESS",
-            # "coords" : tmp_coords,
-            "action": current_action,
-        }
-    else:
-        result = {
-            "code": "NO_POSE_DETECTED",
-            # "coords": [],
-            "action": "",
-        }, 500
-    mutex.release()
-    return result
-
+@app.route("/init")
+def init():
+    try:
+        device = cv2.VideoCapture(VIDEO_URI)
+    except Exception as e:
+        return {"code": -1, "message": str(e)}
+    return {"code": 1}
 
 def b64encode(image):
     '''
@@ -147,7 +144,8 @@ def normalize(features):
 
     return np.array(features)
 
-def extractFeature(frame_seq):
+
+def extract_feature_sequence(frame_seq):
     features = []
     kp_prev = frame_seq[0] # keypoint prev
     for i in range(1, len(frame_seq)):
@@ -160,16 +158,80 @@ def extractFeature(frame_seq):
     return normalize(features)
 
 
+def extract_feature_stand_scruch(keypoint_coords):
+    features = distance(keypoint_coords[0:1], keypoint_coords[1:])[0]
+    # normalize
+    mx = max(features)
+    mn = min(features)
+    for index in range(len(features)):
+        features[index] = (features[index] - mn) / (mx-mn)
+    return features
+
+
+def predict_stand_crunch(model, keypoint_coords):
+    feature = extract_feature_stand_scruch(keypoint_coords)
+    # print("posture feature:", feature)
+
+    # detect number of zero feature:
+    known_points_count = len(feature[feature > 0.])
+    # if too many zero then return unknown
+    if known_points_count < MIN_KEYPOINT_TO_PREDICT:
+        return "unknown"
+    # otherwise predict
+    try:
+        posture = model.predict([feature])[0]
+        posture_label = STAND_CRUNCH_LABELS[posture]
+    except Exception as e:
+        # if error happend returns unknown
+        print("Error happened:", e)
+        posture_label = "unknown"
+    # return label
+    return posture_label
+
+
+# return lane in within frame
+def get_lane(frame, keypoint_coords):
+
+    x1 = frame.shape[1] // 3
+    x2 = frame.shape[1] // 3 * 2
+
+    # for simplicity, just base on nose position
+    nose = keypoint_coords[0]
+
+    # nose[1] presents nose on x-axis
+    if nose[1] <= x1:
+        return LANE_LABELS[0]
+    if nose[1] <= x2:
+        return LANE_LABELS[1]
+
+    return LANE_LABELS[2]
+
+
+# @app.route("/done")
+# def done():
+#     try:
+#         cap.release()
+#         sess.close()
+#     except Exception as e:
+#         return {"code": -1, "message": str(e)}, 500
+#     return {"code": 1}
+
+
 def do_workflow():
     global cap, frame_seq, label, model_cfg, model_outputs, output_stride
     global pose_scores, keypoint_scores, keypoint_coords
 
-    global actions, model_loaded, current_action
+    global actions, model_loaded, current_action, stand_crunch_model, current_stand_crunch_status, current_lane
     global get_img
     #
     # load model:
     #
-    model_loaded = load_model(MODEL_DIR)
+    model_loaded = load_model(SEQUENCE_MODEL_DIR)
+
+    # load stand and crunch model
+    with open(STAND_CRUNCH_MODEL_DIR, "rb") as f:
+        stand_crunch_model = pickle.load(f)
+    # load sessions and related DL components
 
     sess = get_session()
     model_cfg, model_outputs = posenet.load_model(101, sess)
@@ -198,19 +260,27 @@ def do_workflow():
             min_pose_score=SCORE_THRESHOLD)
         keypoint_coords *= output_scale
         mutex.release()
+        first_keypoint = keypoint_coords[0]
+        # predict lane and stand_crunch status
+        current_stand_crunch_status = predict_stand_crunch(stand_crunch_model, first_keypoint)
+        current_lane = get_lane(display_image, first_keypoint)
 
-        frame_seq.append(keypoint_coords[0])
-        if len(frame_seq) % window_size == 0:
-            normalized_feature = extractFeature(frame_seq)
-            normalized_feature = np.expand_dims(normalized_feature, axis=0)
-            pred = model_loaded.predict(normalized_feature)[0]
-            idx = np.argmax(pred)
-            mutex.acquire()
-            current_action = actions[idx]
-            label = "%s - %.2f" % (current_action, pred[idx])
-            mutex.release()
-            frame_seq = []
+        if current_stand_crunch_status == "stand":
+            frame_seq.append(first_keypoint)
+            if len(frame_seq) % window_size == 0:
+                normalized_feature = extract_feature_sequence(frame_seq)
+                normalized_feature = np.expand_dims(normalized_feature, axis=0)
+                pred = model_loaded.predict(normalized_feature)[0]
+                idx = np.argmax(pred)
+                mutex.acquire()
+                current_action = actions[idx]
+                label = "%s - %.2f; %s" % (current_action, pred[idx], current_lane)
+                mutex.release()
+                frame_seq = []
+        else:
+            label = "crunch; " + current_lane
 
+        # render for demo purpose
         overlay_image = posenet.draw_skel_and_kp(
             display_image, pose_scores, keypoint_scores, keypoint_coords,
             min_pose_score=SCORE_THRESHOLD, min_part_score=SCORE_THRESHOLD)
