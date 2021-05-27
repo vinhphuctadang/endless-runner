@@ -10,7 +10,6 @@ import cv2
 import pickle
 import posenet
 import numpy as np
-from constants import *
 from threading import Thread, Lock
 from scipy.spatial.distance import euclidean
 from tensorflow.keras.models import load_model
@@ -22,6 +21,7 @@ from tensorflow.compat.v1.keras.backend import get_session
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 scale_factor = 0.4
+window_size = 10
 VIDEO_URI = 0
 SEQUENCE_MODEL_DIR = "_models/20210525_151927model.h5"
 STAND_CRUNCH_MODEL_DIR = "_models/stand_crunch.model"
