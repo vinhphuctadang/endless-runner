@@ -163,6 +163,9 @@ def extract_feature_stand_scruch(keypoint_coords):
     # normalize
     mx = max(features)
     mn = min(features)
+    if mx == 0:
+        return np.array([0]*len(keypoint_coords[1:]))
+
     for index in range(len(features)):
         features[index] = (features[index] - mn) / (mx-mn)
     return features
@@ -176,17 +179,18 @@ def predict_stand_crunch(model, keypoint_coords):
     known_points_count = len(feature[feature > 0.])
     # if too many zero then return unknown
     if known_points_count < MIN_KEYPOINT_TO_PREDICT:
-        return "unknown"
+        return "unknown", None
     # otherwise predict
     try:
-        posture = model.predict([feature])[0]
-        posture_label = STAND_CRUNCH_LABELS[posture]
+        pred = model.predict_proba([feature])[0]
+        idx = np.argmax(pred)
+        posture_label = STAND_CRUNCH_LABELS[idx]
     except Exception as e:
         # if error happend returns unknown
         print("Error happened:", e)
         posture_label = "unknown"
     # return label
-    return posture_label
+    return posture_label, pred[idx]
 
 
 # return lane in within frame
@@ -262,7 +266,7 @@ def do_workflow():
         mutex.release()
         first_keypoint = keypoint_coords[0]
         # predict lane and stand_crunch status
-        current_stand_crunch_status = predict_stand_crunch(stand_crunch_model, first_keypoint)
+        current_stand_crunch_status, proba = predict_stand_crunch(stand_crunch_model, first_keypoint)
         current_lane = get_lane(display_image, first_keypoint)
 
         if current_stand_crunch_status == "stand":
@@ -277,8 +281,9 @@ def do_workflow():
                 label = "%s - %.2f; %s" % (current_action, pred[idx], current_lane)
                 mutex.release()
                 frame_seq = []
-        else:
-            label = "crunch; " + current_lane
+        elif current_stand_crunch_status == "crunch":
+            label = "crunch - %.2f; %s" % (proba, current_lane)
+
 
         # render for demo purpose
         overlay_image = posenet.draw_skel_and_kp(
