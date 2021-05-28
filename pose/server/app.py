@@ -210,7 +210,7 @@ def get_lane(frame, keypoint_coords):
 
     return LANE_LABELS[2]
 
-
+# # This route should be implemented in release mode
 # @app.route("/done")
 # def done():
 #     try:
