@@ -23,7 +23,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 scale_factor = 0.4
 window_size = 10
 VIDEO_URI = 0
-SEQUENCE_MODEL_DIR = "_models/20210525_151927model.h5"
+SEQUENCE_MODEL_DIR = "/Users/dcongtinh/Workspace/endless-runner/results/20210530_130425_LSTM_Action/k2/LSTM_Action.h5"
 STAND_CRUNCH_MODEL_DIR = "_models/stand_crunch.model"
 SCORE_THRESHOLD = 0.15
 
