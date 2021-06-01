@@ -3,25 +3,30 @@ import csv
 import time
 import json
 import numpy as np
+import seaborn as sns
 from keras.metrics import AUC
 import matplotlib.pyplot as plt
 from keras.models import Sequential
 from sklearn.model_selection import KFold
+from sklearn.metrics import confusion_matrix
 from keras.callbacks import ReduceLROnPlateau
-from keras.layers import LSTM, Dense, Dropout
+from keras.layers import LSTM, Dense, Dropout, Input, Flatten
 
 epochs = 50
 n_hidden = 16
 window_size = 10
 num_keypoints = 17
 batch_size = 1
+classes = ["idle", "run", "walk"]
+filename = 'LSTM_Action_WithoutLSTM_Dense128'
+k_aug = 0
 
-def augmentation(X, y, X_out, y_out, method):
+def augmentation(X, y, X_out, y_out, k, method):
     from tsaug import AddNoise
     X_aug = []
     print('[INFO] ' + method + '...')
-    for x in X:
-        X_aug.append(AddNoise(scale=0.01).augment(x))
+    for i in range(int(len(X) * k)):
+        X_aug.append(AddNoise(scale=0.01).augment(X[i]))
     print('[DONE] ' + method + '.')
 
     return np.vstack((X_out, X_aug)), np.append(y_out, y)
@@ -34,12 +39,13 @@ def get_training_data():
     X = np.load('normalized/Norm_MinMax_Dist3_%02d_X.npy' % window_size)
     y = np.load('normalized/Norm_MinMax_Dist3_%02d_y.npy' % window_size)
 
-    labels = np.unique(y)
     print("[INFO] Augmenting...")
 
     X_augmented, y_augmented = X, y
-    X_augmented, y_augmented = augmentation(X, y, X_augmented, y_augmented, 'AddNoise')
+    if k_aug:
+        X_augmented, y_augmented = augmentation(X, y, X_augmented, y_augmented, k_aug, 'AddNoise')
 
+    print(X_augmented.shape)
     le = LabelEncoder()
     le.fit(y_augmented)
     le_y = np.array(le.transform(y_augmented))
@@ -57,17 +63,19 @@ X, y = get_training_data()
 
 
 def trainer(dir, k, X_train, X_test, y_train, y_test):
-    global mean_val_acc, mean_val_auc, mean_val_loss, mean_time
+    global mean_val_acc, mean_val_auc, mean_val_loss, mean_time, mean_cm
     dirname = os.path.join(dir, 'k' + str(k))
     os.mkdir(dirname)
 
-    model = Sequential(name='LSTM_Action')
-    model.add(LSTM(n_hidden, input_shape=(window_size-1, num_keypoints),
-                    name='lstm_0',
-                    activation='tanh',
-                    return_sequences=False
-                    ))
-    model.add(Dense(64, activation='relu'))
+    model = Sequential(name=filename)
+    # model.add(LSTM(n_hidden, input_shape=(window_size-1, num_keypoints),
+    #                 name='lstm_0',
+    #                 activation='tanh',
+    #                 return_sequences=False
+    #                 ))
+    model.add(Input(shape=(window_size-1, num_keypoints)))
+    model.add(Flatten())
+    model.add(Dense(128, activation='tanh'))
     model.add(Dropout(0.2))
     model.add(Dense(3, activation='softmax'))
     model.compile(optimizer='adam',
@@ -96,11 +104,6 @@ def trainer(dir, k, X_train, X_test, y_train, y_test):
     print("Loss of the model is - ", eval_loss)
     print("Accuracy of the model is - ", eval_acc*100, "%")
     print("AUC of the model is - ", eval_auc*100, "%")
-
-    with open(dir + '/logs.csv', 'a') as csv_file:
-        writer = csv.writer(csv_file)
-        writer.writerow([eval_acc, eval_auc, eval_loss,
-                         '%f (s)' % (end_time - start_time)])
 
     # Save history of model
     # Save it under the form of a json file
@@ -143,11 +146,31 @@ def trainer(dir, k, X_train, X_test, y_train, y_test):
     plt.savefig(dirname + '/' + "Loss_plot.png")
     plt.clf()
 
+    y_true = np.argmax(y_test, axis=1)
+    y_pred = model.predict(X_test)
+    y_pred = np.argmax(y_pred, axis=1)
+
+    cm = confusion_matrix(y_true, y_pred)
+    cm = cm / cm.astype(np.float).sum(axis=1)
+    mean_cm = mean_cm + cm
+    g = sns.heatmap(cm, annot=True, fmt='.2f', cmap="Blues",
+                    xticklabels=classes, yticklabels=classes)
+    g.set_xticklabels(g.get_xticklabels(), ha='center', rotation=0)
+    g.set_yticklabels(g.get_yticklabels(), rotation=0)
+    plt.ylabel("True Label")
+    plt.xlabel("Predicted Label")
+    figure = g.get_figure()
+    figure.savefig(dirname + '/' + "CM_plot.png", facecolor='w', transparent=False)
+    plt.clf()
+
+    with open(dir + '/logs.csv', 'a') as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow([eval_acc, eval_auc, eval_loss, cm,
+                         '%f (s)' % (end_time - start_time)])
+
 
 kf = KFold(n_splits=10, random_state=2021, shuffle=True)
 k = 0
-
-filename = 'LSTM_Action'
 str_time = time.strftime('%Y%m%d_%H%M%S')
 dirname = os.path.join('results', str_time + '_' + filename)
 if not os.path.isdir(dirname):
@@ -157,9 +180,11 @@ if not os.path.isdir(dirname):
 
 with open(dirname + '/logs.csv', 'w') as csv_file:
     writer = csv.writer(csv_file)
-    writer.writerow(['val_acc', 'val_auc', 'val_loss', 'runtime'])
+    writer.writerow(['val_acc', 'val_auc', 'val_loss', 'cm', 'runtime'])
 
 mean_val_acc = mean_val_auc = mean_val_loss = mean_time = 0
+mean_cm = np.array([[0]*len(classes)]*len(classes))
+
 for train_index, test_index in kf.split(X):
     X_train, X_test = X[train_index], X[test_index]
     y_train, y_test = y[train_index], y[test_index]
@@ -169,9 +194,10 @@ for train_index, test_index in kf.split(X):
 with open(dirname + '/logs.csv', 'a') as csv_file:
     writer = csv.writer(csv_file)
     writer.writerow([mean_val_acc/k, mean_val_auc/k,
-                     mean_val_loss/k, mean_time/k])
-
-print("\nMean run-time:", mean_time/k)
+                     mean_val_loss/k, mean_cm/k, mean_time/k])
+print(filename)
+print("Mean run-time:", mean_time/k)
 print("Mean Loss of the model is - ", mean_val_loss/k)
 print("Mean Accuracy of the model is - ", (mean_val_acc*100)/k)
 print("Mean AUC of the model is - ", (mean_val_auc*100)/k)
+print("Mean CM of the model is - ", mean_cm/k)

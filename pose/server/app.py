@@ -23,7 +23,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 scale_factor = 0.4
 window_size = 10
 VIDEO_URI = 0
-SEQUENCE_MODEL_DIR = "/Users/dcongtinh/Workspace/endless-runner/results/20210530_130425_LSTM_Action/k2/LSTM_Action.h5"
+SEQUENCE_MODEL_DIR = "/Users/dcongtinh/Workspace/endless-runner/results/20210530_154012_LSTM_Action_Tanh/k6/LSTM_Action_Tanh.h5"
 STAND_CRUNCH_MODEL_DIR = "_models/stand_crunch.model"
 SCORE_THRESHOLD = 0.15
 
@@ -291,7 +291,7 @@ def do_workflow():
             min_pose_score=SCORE_THRESHOLD, min_part_score=SCORE_THRESHOLD)
 
         cv2.putText(overlay_image, label, (20, 40),
-                    fontFace, fontScale=fontScale, color=(0, 255, 0), thickness=thickness)
+                    fontFace, fontScale=fontScale, color=(0, 0, 255), thickness=thickness)
         get_img = overlay_image
 
     cap.release()
