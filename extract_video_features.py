@@ -12,8 +12,8 @@ import os
 # import posenet.constants as constants
 
 SCORE_THRESHOLD = 0.15
-TARGET_FILE = "crunch.csv"
-SOURCE_FILE = "./pose/data/crunch_2.mov"
+TARGET_FILE = "stand.csv"
+SOURCE_FILE = "/Users/dcongtinh/Workspace/endless-runner/pose/datasets/idle/Tinh_Idle_2.mov"
 REWRITE = False
 DRY_RUN = False # whether or not to write to file
 
@@ -64,16 +64,16 @@ def draw_sparse_skel(display_image, keypoint_scores, keypoint_coords, min_part_s
             continue
         C = keypoint_coords[partId]
         display_image = cv2.circle(display_image, (int(C[1]), int(C[0])), 3, color=(0, 255, 0), thickness=3)
-            
+
     return display_image
-        
+
 def main():
     model = 101
     with tf.Session() as sess:
         model_cfg, model_outputs = posenet.load_model(model, sess)
         output_stride = model_cfg['output_stride']
-        
-        # flip the video 
+
+        # flip the video
         flip = True
 
         # re-scale for faster detection
@@ -85,7 +85,7 @@ def main():
 
         # split file name
         target_file = TARGET_FILE
-        
+
         # start = time.time()
         frame_count = 0
 
@@ -95,19 +95,19 @@ def main():
         # used to record the time at which we processed current frame
         new_frame_time = 0
 
-        # df 
+        # df
         if not REWRITE and os.path.isfile(target_file):
             df = pd.read_csv(target_file, index_col=0)
         else:
-            df = pd.DataFrame({"keypoint_coords": [], "keypoint_scores": []}) 
-    
+            df = pd.DataFrame({"keypoint_coords": [], "keypoint_scores": []})
+
         while True:
             try:
                 input_image, display_image, output_scale = posenet.read_cap(
                     cap, flip=flip, scale_factor=scale_factor, output_stride=output_stride)
             except Exception as err:
                 print("Error: Read cap. Details:", err)
-                break 
+                break
 
             # time when we finish processing for this frame
             new_frame_time = time.time()
@@ -136,11 +136,11 @@ def main():
                 max_pose_detections = 1,
                 min_pose_score      = SCORE_THRESHOLD)
 
-            # original_coords = keypoint_coords 
+            # original_coords = keypoint_coords
             keypoint_coords *= output_scale
 
             # print("keypoints:", keypoint_coords)
-           
+
             display_image = posenet.draw_fps(display_image, fps)
             display_image = posenet.draw_skel_and_kp(
                 display_image, pose_scores, keypoint_scores, keypoint_coords,
