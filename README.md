@@ -63,3 +63,36 @@ flask-socketio==4
 python-engineio==3.2.0
 python-socketio==3.0.0
 ```
+
+### Unity C# socket io usage implementation example:
+
+```
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Text;
+using System.Threading.Tasks;
+using UnityEngine;
+using socket.io;
+
+public class SocketListener : MonoBehaviour
+{
+    // Start is called before the first frame update
+    void Start()
+    {
+        var socket = Socket.Connect("http://localhost:5000");
+
+        // listen on event, may push into queue
+        socket.On("ping", (string response) =>
+        {
+            UnityEngine.Debug.Log($"server: {response}");
+        });
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        
+    }
+}
+```
