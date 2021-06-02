@@ -47,3 +47,19 @@ Training to recognize posture is easier than to recognize actions, thus the fold
 ```
 
 In each video, creator must ensure that characters posture is maintained (slightly different allowed!) to make a clean data folder. Lighting condition should be good, too.
+
+## Web socket usage:
+
+- Unity: 
+
+```https://github.com/nhn/socket.io-client-unity3d/releases/tag/v.1.1.2```
+
+**Note**: Require socket.io protocol revision 3, 4
+
+- Python server side requirements (must):
+
+```
+flask-socketio==4
+python-engineio==3.2.0
+python-socketio==3.0.0
+```
