@@ -1,5 +1,9 @@
 # # # # # # # # # # # # # # # #
 # Vinh Phuc Ta Dang ft Dao Cong Tinh
+# Requirement note:
+# pip install flask flask_socketio
+# Unity:
+# Asset store > Package Manager > https://github.com/floatinghotpot/socket.io-unity.git
 # # # # # # # # # # # # # # # #
 import os
 import sys
@@ -16,7 +20,7 @@ from tensorflow.keras.models import load_model
 from flask import Flask, render_template, Response
 from sklearn.metrics import pairwise_distances as distance
 from tensorflow.compat.v1.keras.backend import get_session
-
+from flask_socketio import SocketIO
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -31,6 +35,7 @@ fontFace = cv2.FONT_HERSHEY_SIMPLEX
 fontScale, thickness = 1.5, 2
 
 app = Flask(__name__)
+ioWrapper = SocketIO(app, logger=True, engineio_logger=True)
 
 cap             = None
 frame_seq       = None
@@ -48,24 +53,44 @@ keypoint_coords = None
 get_img         = None
 
 # model and action
-current_action  = None
+
 model_loaded    = None
 stand_crunch_model = None
 
+current_action              = None
 current_stand_crunch_status = None
-current_lane = None
+current_lane                = None
+
+current_status              = None
 
 # constants
-actions = ["idle", "running", "walking"]
+ACTIONS = ["idle", "running", "walking"]
 STAND_CRUNCH_LABELS = ["stand", "crunch"]
 LANE_LABELS = ["left", "middle", "right"]
 MIN_KEYPOINT_TO_PREDICT = 8
 
 mutex = Lock()
 
+def make_result(current_action, current_stand_crunch_status, current_lane):
+    return {
+        "code": 1,
+        "action": current_action,
+        "stand_crunch": current_stand_crunch_status,
+        "lane": current_lane
+    }
+
+def is_different(old_action, new_action):
+    if not old_action:
+        return new_action != None    
+    # return true if 2 action are different
+    for key in old_action:
+        if old_action[key] != new_action[key]:
+            return True 
+    return False
 
 @app.route("/")
 def ping():
+    ioWrapper.emit("ping", {"code": cap})
     if not cap:
         # still not ready
         return {"code": 0}
@@ -73,6 +98,7 @@ def ping():
     return {"code": 1}
 
 
+# deprecated 
 @app.route("/pose")
 def get_pose():
     return {
@@ -82,20 +108,13 @@ def get_pose():
         "lane": current_lane
     }
 
-@app.route("/init")
-def init():
-    try:
-        device = cv2.VideoCapture(VIDEO_URI)
-    except Exception as e:
-        return {"code": -1, "message": str(e)}
-    return {"code": 1}
-
 def b64encode(image):
     '''
     image: array data
     '''
     import base64
-    success, img_enc = cv2.imencode('.JPEG', image)
+    # TODO: Check success status in _
+    _, img_enc = cv2.imencode('.JPEG', image)
     data = base64.b64encode(img_enc)
     img = data.decode('ascii')
     img = 'data:image/jpeg;base64,%s' % img
@@ -110,7 +129,8 @@ def show_image():
 @app.route("/image")
 def get_image():
     import base64
-    success, img_enc = cv2.imencode('.JPEG', get_img)
+    # TODO: Check success status in _, currently we don't care about it
+    _, img_enc = cv2.imencode('.JPEG', get_img)
     data = base64.b64encode(img_enc)
     img = data.decode('ascii')
     return img
@@ -123,7 +143,7 @@ def get_images():
 
 def gen():
     while True:
-        success, img_enc = cv2.imencode('.JPEG', get_img)
+        _, img_enc = cv2.imencode('.JPEG', get_img)
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + b'%s' % (img_enc.tobytes()) + b'\r\n')
 
@@ -225,7 +245,7 @@ def do_workflow():
     global cap, frame_seq, label, model_cfg, model_outputs, output_stride
     global pose_scores, keypoint_scores, keypoint_coords
 
-    global actions, model_loaded, current_action, stand_crunch_model, current_stand_crunch_status, current_lane
+    global ACTIONS, model_loaded, current_action, stand_crunch_model, current_stand_crunch_status, current_lane
     global get_img
     #
     # load model:
@@ -265,8 +285,10 @@ def do_workflow():
         keypoint_coords *= output_scale
         mutex.release()
         first_keypoint = keypoint_coords[0]
-        # predict lane and stand_crunch status
+        
+        # predict stand_crunch status
         current_stand_crunch_status, proba = predict_stand_crunch(stand_crunch_model, first_keypoint)
+        # predict lane
         current_lane = get_lane(display_image, first_keypoint)
 
         if current_stand_crunch_status == "stand":
@@ -277,27 +299,34 @@ def do_workflow():
                 pred = model_loaded.predict(normalized_feature)[0]
                 idx = np.argmax(pred)
                 mutex.acquire()
-                current_action = actions[idx]
+                current_action = ACTIONS[idx]
                 label = "%s - %.2f; %s" % (current_action, pred[idx], current_lane)
                 mutex.release()
                 frame_seq = []
         elif current_stand_crunch_status == "crunch":
             label = "crunch - %.2f; %s" % (proba, current_lane)
-
-
+        
         # render for demo purpose
         overlay_image = posenet.draw_skel_and_kp(
             display_image, pose_scores, keypoint_scores, keypoint_coords,
             min_pose_score=SCORE_THRESHOLD, min_part_score=SCORE_THRESHOLD)
 
+        # compare with old action status, emit event if action differs from previous
+        global current_status
+        tmp_status = make_result(current_action, current_stand_crunch_status, current_lane)
+        if is_different(current_status, tmp_status):
+            current_status = tmp_status
+            ioWrapper.emit("statusChanged", current_status)
+    
         cv2.putText(overlay_image, label, (20, 40),
                     fontFace, fontScale=fontScale, color=(0, 0, 255), thickness=thickness)
         get_img = overlay_image
 
+    # TODO: Fix infinite loop
     cap.release()
-
 
 if __name__ == "__main__":
     main_thread = Thread(target=do_workflow, args=())
     main_thread.start()
-    app.run(host="0.0.0.0", debug=True)
+    ioWrapper.init_app(app, cors_allowed_origins="*")
+    ioWrapper.run(app, host="0.0.0.0", debug=True)
