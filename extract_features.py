@@ -9,7 +9,6 @@ import time
 import posenet
 import numpy as np
 from constants import *
-# import tensorflow as tf
 from scipy.spatial.distance import euclidean
 from tensorflow.compat.v1.keras import backend as K
 
