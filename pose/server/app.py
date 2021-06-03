@@ -28,7 +28,7 @@ scale_factor = 0.4
 window_size = 10
 VIDEO_URI = 0
 SEQUENCE_MODEL_DIR = "/Users/dcongtinh/Workspace/endless-runner/results/20210530_154012_LSTM_Action_Tanh/k6/LSTM_Action_Tanh.h5"
-STAND_CRUNCH_MODEL_DIR = "_models/stand_crunch.model"
+STAND_CRUNCH_MODEL_DIR = "/Users/dcongtinh/Workspace/endless-runner/stand_crunch.model"
 SCORE_THRESHOLD = 0.15
 
 fontFace = cv2.FONT_HERSHEY_SIMPLEX

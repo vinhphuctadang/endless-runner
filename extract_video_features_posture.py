@@ -8,7 +8,7 @@ from tensorflow.compat.v1.keras.backend import get_session
 
 SCORE_THRESHOLD = 0.15
 TARGET_FILE = "stand.csv"
-SOURCE_FILE = "/Users/dcongtinh/Workspace/endless-runner/pose/datasets/idle/Tinh_Idle_2.mov"
+SOURCE_FILE = "/Users/dcongtinh/Workspace/endless-runner/pose/datasets/running/Tinh_Running_v2.1.mov"
 REWRITE = False
 DRY_RUN = False # whether or not to write to file
 
