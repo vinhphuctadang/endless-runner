@@ -48,45 +48,91 @@ Training to recognize posture is easier than to recognize actions, thus the fold
 
 In each video, creator must ensure that characters posture is maintained (slightly different allowed!) to make a clean data folder. Lighting condition should be good, too.
 
-## Web socket usage:
+## Socket connect:
 
-- Unity: 
 
-```https://github.com/nhn/socket.io-client-unity3d/releases/tag/v.1.1.2```
-
-**Note**: Require socket.io protocol revision 3, 4
-
-- Python server side requirements (must):
+### Server side script:
 
 ```
-flask-socketio==4
-python-engineio==3.2.0
-python-socketio==3.0.0
+import socket_helper as sock
+from threading import Thread 
+Thread(target=sock.start_listening,).start()
 ```
 
-### Unity C# socket io usage implementation example:
+### Unity script
 
 ```
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
+using System.Collections;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
-using System.Threading.Tasks;
+using System.Threading;
 using UnityEngine;
-using socket.io;
+using System.Linq;
 
 public class SocketListener : MonoBehaviour
 {
     // Start is called before the first frame update
+    private Socket sock;
+    private static ManualResetEvent connectDone =
+        new ManualResetEvent(false);  
+    static string decode_message(byte[] raw){
+        string result = "";
+        for(int i = 0; i<raw.Length && raw[i] != 0; ++i) {
+            result += (char) raw[i];
+        }
+        return result;
+    }
+
+    IEnumerator listenSocket(){
+        
+        while(true) {
+            // read data if available
+            if (sock.Available > 0) {
+                // reset buffer
+                var buffer = new byte[128];
+
+                // receive data from socket
+                var readCount = sock.Receive(buffer);
+
+                if (readCount == 0) {
+                    // stop the corroutine
+                    yield return null;
+                }
+
+                // decode it
+                var message = decode_message(buffer);
+                // return to caller
+                Debug.Log(message);
+                yield return message;
+            }
+            yield return "";
+        }
+    }
+
     void Start()
     {
-        var socket = Socket.Connect("http://localhost:5000");
+        // connect 
+        sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        sock.Blocking = false;
+        sock.ReceiveTimeout = 1000; // 100 ms for receiving
+        // connect async
+        sock.BeginConnect(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5000),
+            new AsyncCallback(ConnectCallback), sock);
+        connectDone.WaitOne();
+        // now start corroutine
+        StartCoroutine("listenSocket");
+        // cannot start corroutine in another thread, which prevent corroutine to work with unity main thread
+    }
 
-        // listen on event, may push into queue
-        socket.On("ping", (string response) =>
-        {
-            UnityEngine.Debug.Log($"server: {response}");
-        });
+    private void ConnectCallback(IAsyncResult ar) {
+        // after connecting done call to start corroutine
+        // Retrieve the socket from the state object.  
+        sock = (Socket) ar.AsyncState;  
+        // Complete the connection phase
+        sock.EndConnect(ar);
+        connectDone.Set();
     }
 
     // Update is called once per frame
@@ -95,4 +141,5 @@ public class SocketListener : MonoBehaviour
         
     }
 }
+
 ```
