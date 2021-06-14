@@ -9,10 +9,13 @@ import os
 import sys
 # add search path
 sys.path.append("../../")
+sys.path.append("../")
+import socket_helper as sock
 
 import cv2
 import pickle
 import posenet
+import json
 import numpy as np
 from threading import Thread, Lock
 from scipy.spatial.distance import euclidean
@@ -20,13 +23,13 @@ from tensorflow.keras.models import load_model
 from flask import Flask, render_template, Response
 from sklearn.metrics import pairwise_distances as distance
 from tensorflow.compat.v1.keras.backend import get_session
-from flask_socketio import SocketIO
+
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 scale_factor = 0.4
 window_size = 10
-VIDEO_URI = 0
+VIDEO_URI = 1
 SEQUENCE_MODEL_DIR = "/Users/dcongtinh/Workspace/endless-runner/results/20210530_154012_LSTM_Action_Tanh/k6/LSTM_Action_Tanh.h5"
 STAND_CRUNCH_MODEL_DIR = "/Users/dcongtinh/Workspace/endless-runner/stand_crunch.model"
 SCORE_THRESHOLD = 0.15
@@ -35,7 +38,7 @@ fontFace = cv2.FONT_HERSHEY_SIMPLEX
 fontScale, thickness = 1.5, 2
 
 app = Flask(__name__)
-ioWrapper = SocketIO(app, logger=True, engineio_logger=True)
+
 
 cap             = None
 frame_seq       = None
@@ -81,16 +84,17 @@ def make_result(current_action, current_stand_crunch_status, current_lane):
 
 def is_different(old_action, new_action):
     if not old_action:
-        return new_action != None    
+        return new_action != None
     # return true if 2 action are different
     for key in old_action:
         if old_action[key] != new_action[key]:
-            return True 
+            return True
     return False
 
 @app.route("/")
 def ping():
-    ioWrapper.emit("ping", {"code": cap})
+    # ioWrapper.emit("ping", {"code": cap})
+    # sock.broadcast(json.dumps({"code": 0}))
     if not cap:
         # still not ready
         return {"code": 0}
@@ -98,7 +102,7 @@ def ping():
     return {"code": 1}
 
 
-# deprecated 
+# deprecated
 @app.route("/pose")
 def get_pose():
     return {
@@ -215,7 +219,6 @@ def predict_stand_crunch(model, keypoint_coords):
 
 # return lane in within frame
 def get_lane(frame, keypoint_coords):
-
     x1 = frame.shape[1] // 3
     x2 = frame.shape[1] // 3 * 2
 
@@ -285,7 +288,7 @@ def do_workflow():
         keypoint_coords *= output_scale
         mutex.release()
         first_keypoint = keypoint_coords[0]
-        
+
         # predict stand_crunch status
         current_stand_crunch_status, proba = predict_stand_crunch(stand_crunch_model, first_keypoint)
         # predict lane
@@ -305,7 +308,7 @@ def do_workflow():
                 frame_seq = []
         elif current_stand_crunch_status == "crunch":
             label = "crunch - %.2f; %s" % (proba, current_lane)
-        
+
         # render for demo purpose
         overlay_image = posenet.draw_skel_and_kp(
             display_image, pose_scores, keypoint_scores, keypoint_coords,
@@ -316,17 +319,22 @@ def do_workflow():
         tmp_status = make_result(current_action, current_stand_crunch_status, current_lane)
         if is_different(current_status, tmp_status):
             current_status = tmp_status
-            ioWrapper.emit("statusChanged", current_status)
-    
+            sock.broadcast(json.dumps(current_status))
+            print("Emitted message:", json.dumps(current_status))
+            # ioWrapper.emit("statusChanged", current_status)
+
         cv2.putText(overlay_image, label, (20, 40),
-                    fontFace, fontScale=fontScale, color=(0, 0, 255), thickness=thickness)
+                    fontFace, fontScale=fontScale, color=(0, 255, 0), thickness=thickness)
         get_img = overlay_image
 
     # TODO: Fix infinite loop
     cap.release()
 
-if __name__ == "__main__":
+def init():
     main_thread = Thread(target=do_workflow, args=())
     main_thread.start()
-    ioWrapper.init_app(app, cors_allowed_origins="*")
-    ioWrapper.run(app, host="0.0.0.0", debug=True)
+    Thread(target=sock.start_listening, args=("0.0.0.0", 8080)).start()
+
+if __name__ == "__main__":
+    init()
+    app.run(host="0.0.0.0", debug=True, use_reloader=False)
